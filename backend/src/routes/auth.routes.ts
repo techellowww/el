@@ -55,10 +55,11 @@ router.post('/login', async (req: Request, res: Response) => {
       ipAddress: (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1',
     });
 
+    const isProduction = process.env.NODE_ENV === 'production';
     res.cookie('el_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -76,8 +77,13 @@ router.post('/login', async (req: Request, res: Response) => {
 
 router.post('/logout', async (req: Request, res: Response) => {
   const token = req.cookies?.el_token;
+  const isProduction = process.env.NODE_ENV === 'production';
   if (token) {
-    res.clearCookie('el_token', { path: '/' });
+    res.clearCookie('el_token', {
+      path: '/',
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+    });
   }
   res.json({ success: true, message: 'Logged out successfully' });
 });

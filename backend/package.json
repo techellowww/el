@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "start": "tsx watch src/server.ts",
+    "build": "prisma generate && tsc",
+    "start": "node dist/src/server.js",
     "test": "tsx tests/timerAndBusinessEngine.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
@@ -23,6 +23,7 @@
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.6.0",
     "nodemailer": "^10.1.0",
+    "prisma": "^6.4.1",
     "xlsx": "^0.18.5",
     "zod": "^4.6.7"
   },
