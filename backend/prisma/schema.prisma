@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String                  @id @default(cuid())
+  email                String                  @unique
+  passwordHash         String
+  name                 String
+  employeeId           String                  @unique
+  role                 String                  @default("EMPLOYEE") // "ADMIN" | "EMPLOYEE"
+  isActive             Boolean                 @default(true)
+  department           String?
+  phone                String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  assignedProjects     ProjectAssignment[]
+  createdProjects      Project[]               @relation("ProjectCreator")
+  timeEntries          TimeEntry[]
+  correctionsRequested TimeCorrectionRequest[] @relation("EmployeeCorrections")
+  correctionsReviewed  TimeCorrectionRequest[] @relation("AdminCorrections")
+  auditLogs            AuditLog[]
+  screenshots          ScreenshotRecord[]
+
+  @@map("el_users")
+}
+
+model Project {
+  id          String              @id @default(cuid())
+  code        String              @unique
+  name        String
+  description String?
+  status      String              @default("ACTIVE") // "ACTIVE" | "COMPLETED"
+  startDate   DateTime?
+  closureDate DateTime?
+  createdById String
+  creator     User                @relation("ProjectCreator", fields: [createdById], references: [id])
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  assignments ProjectAssignment[]
+  timeEntries TimeEntry[]
+
+  @@map("el_projects")
+}
+
+model ProjectAssignment {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@map("el_project_assignments")
+}
+
+model TimeEntry {
+  id             String                  @id @default(cuid())
+  userId         String
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId      String
+  project        Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  startTime      DateTime
+  endTime        DateTime?
+  duration       Int                     @default(0) // seconds
+  targetDuration Int?                    // Planned target duration in seconds for outside-hours auto-cutoff
+  status         String                  @default("RUNNING") // "RUNNING" | "STOPPED" | "AUTO_CUTOFF" | "CORRECTED"
+  classification String                  @default("REGULAR") // "REGULAR" | "OUTSIDE_HOURS" | "AMBIGUOUS_REVIEW"
+  source         String                  @default("TIMER") // "TIMER" | "MANUAL" | "CORRECTION" | "AUTO_CUTOFF"
+  notes          String?
+  isOutsideHours Boolean                 @default(false)
+  needsReview    Boolean                 @default(false)
+  reviewReason   String?
+  isDeleted      Boolean                 @default(false)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  corrections    TimeCorrectionRequest[]
+  screenshots    ScreenshotRecord[]
+
+  @@index([userId, startTime])
+  @@index([projectId, startTime])
+  @@index([status])
+  @@index([userId, status])
+  @@map("el_time_entries")
+}
+
+model TimeCorrectionRequest {
+  id                 String    @id @default(cuid())
+  timeEntryId        String
+  timeEntry          TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User      @relation("EmployeeCorrections", fields: [userId], references: [id], onDelete: Cascade)
+  originalStartTime  DateTime
+  originalEndTime    DateTime?
+  originalDuration   Int
+  proposedStartTime  DateTime
+  proposedEndTime    DateTime
+  proposedDuration   Int
+  reason             String
+  status             String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  reviewedById       String?
+  reviewer           User?     @relation("AdminCorrections", fields: [reviewedById], references: [id])
+  reviewComment      String?
+  reviewedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status])
+  @@index([userId])
+  @@map("el_correction_requests")
+}
+
+model OfficeSchedule {
+  id                String   @id @default("default-schedule")
+  openingTime       String   @default("09:00")
+  closingTime       String   @default("18:00")
+  workingDays       String   @default("MON,TUE,WED,THU,FRI")
+  timezone          String   @default("Asia/Kolkata")
+  allowOutsideHours Boolean  @default(true)
+  autoCutoffEnabled Boolean  @default(true)
+  updatedById       String?
+  updatedAt         DateTime @updatedAt
+
+  @@map("el_office_schedules")
+}
+
+model ScreenshotSetting {
+  id              String   @id @default("default-screenshot-setting")
+  enabled         Boolean  @default(false)
+  intervalMinutes Int      @default(60)
+  requireConsent  Boolean  @default(true)
+  consentNotice   String   @default("Screenshots are periodically captured for activity verification during active project timers.")
+  updatedAt       DateTime @updatedAt
+
+  @@map("el_screenshot_settings")
+}
+
+model ScreenshotRecord {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeEntryId String?
+  timeEntry   TimeEntry? @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
+  capturedAt  DateTime   @default(now())
+  imageUrl    String
+  fileSize    Int        @default(0)
+  metadata    String?
+  viewedAt    DateTime?
+  viewedById  String?
+
+  @@index([userId, capturedAt])
+  @@map("el_screenshot_records")
+}
+
+model EmailScheduleSetting {
+  id            String   @id @default("default-email-setting")
+  enabled       Boolean  @default(true)
+  dailyEnabled  Boolean  @default(true)
+  dailyTime     String   @default("19:00")
+  weeklyEnabled Boolean  @default(true)
+  weeklyDay     String   @default("FRI")
+  weeklyTime    String   @default("18:00")
+  recipients    String   @default("admin@elapp.local")
+  timezone      String   @default("Asia/Kolkata")
+  smtpHost      String?  @default("smtp.gmail.com")
+  smtpPort      Int?     @default(587)
+  smtpUser      String?
+  smtpPass      String?
+  smtpFrom      String?  @default("EL App <notifications@elapp.local>")
+  updatedAt     DateTime @updatedAt
+
+  @@map("el_email_settings")
+}
+
+model EmailDeliveryLog {
+  id         String    @id @default(cuid())
+  type       String
+  recipient  String
+  subject    String
+  status     String    @default("SENT") // "SENT" | "FAILED" | "SIMULATED"
+  content    String?
+  error      String?
+  retryCount Int       @default(0)
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([type, createdAt])
+  @@map("el_email_delivery_logs")
+}
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action          String
+  targetEntity    String
+  targetId        String
+  mandatoryReason String?
+  details         String?
+  ipAddress       String?
+  createdAt       DateTime @default(now())
+
+  @@index([action])
+  @@index([targetEntity, targetId])
+  @@index([createdAt])
+  @@map("el_audit_logs")
+}
