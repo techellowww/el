@@ -29,7 +29,7 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       if (!origin) return callback(null, true);
       try {
         const url = new URL(origin);
@@ -66,7 +66,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/screenshots', screenshotsRoutes);
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (req: express.Request, res: express.Response) => {
   res.json({
     status: 'ok',
     service: 'EL App Backend API',

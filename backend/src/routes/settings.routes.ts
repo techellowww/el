@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate, requireAdmin, AuthRequest } from '../lib/auth';
 import { logAuditEvent } from '../lib/audit';
@@ -13,7 +13,7 @@ import {
 const router = Router();
 
 // Office Hours
-router.get('/office-hours', async (req, res: Response) => {
+router.get('/office-hours', async (req: Request, res: Response) => {
   try {
     const schedule = await prisma.officeSchedule.findUnique({
       where: { id: 'default-schedule' },
@@ -236,7 +236,7 @@ router.post('/email/send-eod', authenticate, requireAdmin, async (req: AuthReque
 });
 
 // Screenshot Settings
-router.get('/screenshots', async (req, res: Response) => {
+router.get('/screenshots', async (req: Request, res: Response) => {
   try {
     const settings = await prisma.screenshotSetting.findUnique({
       where: { id: 'default-screenshot-setting' },
