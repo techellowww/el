@@ -10,6 +10,7 @@ import {
   sendCustomDateRangeReportEmail,
   sendEodReportEmail,
   parseRecipientEmails,
+  testSmtpConnection,
 } from '../lib/emailService';
 import { cleanupOldScreenshots } from '../lib/screenshotGenerator';
 import { getCustomReport, formatDurationHours } from '../lib/reportEngine';
@@ -113,7 +114,17 @@ const getEmailSettingsHandler = async (req: AuthRequest, res: Response) => {
         take: 100,
       }),
     ]);
-    res.json({ settings, deliveryLogs });
+    res.json({
+      settings,
+      deliveryLogs,
+      envDefaults: {
+        smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
+        smtpPort: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587,
+        smtpUser: process.env.SMTP_USER || '',
+        smtpFrom: process.env.SMTP_FROM || 'EL App Notifications <notifications@elapp.local>',
+        hasEnvPass: Boolean(process.env.SMTP_PASS),
+      },
+    });
   } catch (error) {
     console.error('Error fetching email settings:', error);
     res.status(500).json({ error: 'Failed to retrieve email settings' });
@@ -205,6 +216,22 @@ router.get('/email', authenticate, requireAdmin, getEmailSettingsHandler);
 router.put('/email', authenticate, requireAdmin, putEmailSettingsHandler);
 router.get('/mail/settings', authenticate, requireAdmin, getEmailSettingsHandler);
 router.put('/mail/settings', authenticate, requireAdmin, putEmailSettingsHandler);
+
+const postTestConnectionHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    const { host, port, user, pass } = req.body || {};
+    const result = await testSmtpConnection({ host, port, user, pass });
+    if (result.success) {
+      res.json({ success: true, message: result.message });
+    } else {
+      res.status(400).json({ success: false, error: result.error, guidance: result.guidance });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Internal server error while testing SMTP connection.' });
+  }
+};
+router.post('/email/test-connection', authenticate, requireAdmin, postTestConnectionHandler);
+router.post('/mail/test-connection', authenticate, requireAdmin, postTestConnectionHandler);
 
 // 4.2 Mail Audit List
 router.get('/mail/audit', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {

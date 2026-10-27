@@ -51,6 +51,67 @@ export async function getEmailSettings() {
   return settings;
 }
 
+export async function testSmtpConnection(customConfig?: {
+  host?: string;
+  port?: number;
+  user?: string;
+  pass?: string;
+}) {
+  const settings = await getEmailSettings();
+
+  const host = customConfig?.host || settings?.smtpHost || process.env.SMTP_HOST;
+  const port = customConfig?.port || settings?.smtpPort || (process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587);
+  const user = customConfig?.user || settings?.smtpUser || process.env.SMTP_USER;
+  const pass = customConfig?.pass || settings?.smtpPass || process.env.SMTP_PASS;
+
+  if (!host || !user || !pass) {
+    return {
+      success: false,
+      error: 'Incomplete SMTP settings: Host, Username, and Password are all required.',
+    };
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: {
+        user,
+        pass,
+      },
+    });
+
+    await transporter.verify();
+    return {
+      success: true,
+      message: `SMTP connection established and verified successfully with ${host}:${port} (${user}).`,
+    };
+  } catch (err: any) {
+    const rawError = err instanceof Error ? err.message : String(err);
+    let guidance = '';
+
+    if (
+      rawError.includes('535') ||
+      rawError.includes('BadCredentials') ||
+      rawError.toLowerCase().includes('username and password not accepted')
+    ) {
+      if (host.includes('gmail.com')) {
+        guidance =
+          'Google requires a 16-character App Password (with 2-Step Verification enabled). Normal Gmail account passwords are rejected. Generate an App Password at https://myaccount.google.com/apppasswords';
+      } else {
+        guidance = 'The SMTP server rejected the provided username or password. Please verify your credentials.';
+      }
+    }
+
+    return {
+      success: false,
+      error: rawError,
+      guidance,
+    };
+  }
+}
+
 export async function sendEmailNotification({
   to,
   subject,
@@ -122,7 +183,8 @@ export async function sendEmailNotification({
 }
 
 /**
- * Generates rich HTML for the End-of-Day (EOD) Employee Project & Timings Report
+ * Generates rich HTML for the End-of-Day (EOD) Employee Hours Report
+ * Formatted cleanly with Employee Name, Inside Hours, Outside Hours, and Total Hours.
  */
 export async function generateEodEmailHtml(date: Date = new Date()) {
   const report = await getDailyReport({ date });
@@ -149,9 +211,8 @@ export async function generateEodEmailHtml(date: Date = new Date()) {
     return {
       user: emp.user,
       totalDuration: emp.totalDuration,
-      regularDuration: emp.regularDuration,
-      outsideHoursDuration: emp.outsideHoursDuration,
-      projects: emp.projects,
+      regularDuration: emp.regularDuration, // Inside Hours
+      outsideHoursDuration: emp.outsideHoursDuration, // Outside Hours
       entries,
     };
   });
@@ -160,24 +221,6 @@ export async function generateEodEmailHtml(date: Date = new Date()) {
   const recordedUserIds = new Set(report.employeeBreakdown.map((e) => e.user.id));
   const unrecordedEmployees = allActiveEmployees.filter((e) => !recordedUserIds.has(e.id));
 
-  // Project-wise total hours aggregation
-  const projectAggregates = new Map<string, { code: string; name: string; totalSeconds: number; contributors: Set<string> }>();
-  for (const entry of report.rawEntries) {
-    if (!projectAggregates.has(entry.projectId)) {
-      projectAggregates.set(entry.projectId, {
-        code: entry.project.code,
-        name: entry.project.name,
-        totalSeconds: 0,
-        contributors: new Set(),
-      });
-    }
-    const agg = projectAggregates.get(entry.projectId)!;
-    agg.totalSeconds += entry.duration;
-    agg.contributors.add(entry.user.name);
-  }
-
-  const projectSummaryList = Array.from(projectAggregates.values());
-
   const formattedDate = new Date(report.date).toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -185,86 +228,102 @@ export async function generateEodEmailHtml(date: Date = new Date()) {
     day: 'numeric',
   });
 
-  // Build Employee Project and Timings Table HTML
-  const employeeSectionsHtml = recordedEmployeesData.length === 0
-    ? `
-      <div style="padding: 24px; text-align: center; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; color: #64748b; font-size: 14px;">
-        No employee activity or time entries recorded for this date.
-      </div>
-    `
-    : recordedEmployeesData.map((emp) => {
-        const timingsRows = emp.entries.map((entry) => `
-          <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 10px 14px; font-weight: 600; color: #1e293b;">
-              <span style="font-family: monospace; color: #2563eb; background: #eff6ff; padding: 2px 6px; rounded: 4px; font-size: 11px;">${entry.project.code}</span>
-              <span style="display: block; font-size: 12px; color: #475569; margin-top: 2px;">${entry.project.name}</span>
-            </td>
-            <td style="padding: 10px 14px; font-family: monospace; font-size: 12px; color: #334155; white-space: nowrap;">
-              <strong>${formatTimeAmPm(entry.startTime)}</strong> → <strong>${formatTimeAmPm(entry.endTime)}</strong>
-            </td>
-            <td style="padding: 10px 14px; font-weight: 600; color: #0f172a; font-size: 13px; white-space: nowrap;">
-              ${formatDurationDetailed(entry.duration)}
-            </td>
-            <td style="padding: 10px 14px; white-space: nowrap;">
-              ${entry.isOutsideHours
-                ? `<span style="background: #fef3c7; color: #b45309; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600;">Outside Hours</span>`
-                : `<span style="background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600;">Regular</span>`
-              }
-            </td>
-            <td style="padding: 10px 14px; font-size: 12px; color: #64748b;">
-              ${entry.notes ? entry.notes : '<span style="color: #cbd5e1; font-style: italic;">No task notes</span>'}
-            </td>
-          </tr>
-        `).join('');
+  // Inside hours calculation across report
+  const insideSeconds = report.regularSeconds || Math.max(0, report.totalTrackedSeconds - report.outsideHoursSeconds);
 
-        return `
-          <div style="margin-bottom: 24px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-            <div style="background: #f8fafc; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-              <div>
-                <span style="font-weight: 700; font-size: 15px; color: #0f172a;">${emp.user.name}</span>
-                <span style="font-family: monospace; font-size: 12px; color: #64748b; margin-left: 8px;">[${emp.user.employeeId}]</span>
-                <span style="font-size: 12px; color: #2563eb; margin-left: 8px; background: #dbeafe; padding: 1px 6px; border-radius: 4px;">${emp.user.department || 'General'}</span>
-              </div>
-              <div style="text-align: right;">
-                <span style="font-weight: 700; font-size: 14px; color: #0f172a; background: #f1f5f9; padding: 4px 10px; border-radius: 6px;">
-                  Total: ${formatDurationDetailed(emp.totalDuration)}
-                </span>
-                ${emp.outsideHoursDuration > 0
-                  ? `<span style="font-size: 11px; color: #d97706; display: block; margin-top: 2px;">(${formatDurationDetailed(emp.outsideHoursDuration)} Outside Hours)</span>`
-                  : ''
-                }
-              </div>
-            </div>
-
-            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-              <thead>
-                <tr style="background: #f8fafc; color: #64748b; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0;">
-                  <th style="padding: 8px 14px;">Project</th>
-                  <th style="padding: 8px 14px;">Timings (Start → End)</th>
-                  <th style="padding: 8px 14px;">Duration</th>
-                  <th style="padding: 8px 14px;">Classification</th>
-                  <th style="padding: 8px 14px;">Task Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${timingsRows}
-              </tbody>
-            </table>
-          </div>
-        `;
-      }).join('');
-
-  // Build Project Summary Rows
-  const projectSummaryRowsHtml = projectSummaryList.length === 0
-    ? `<tr><td colspan="4" style="padding: 12px 16px; text-align: center; color: #94a3b8;">No projects tracked today.</td></tr>`
-    : projectSummaryList.map((p) => `
+  // 1. Employee Hours Summary Rows (Employee Name, Inside Hours, Outside Hours, Total Hours)
+  const employeeSummaryRowsHtml = recordedEmployeesData.length === 0
+    ? `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #64748b; font-size: 13px;">No employee hours recorded for this date.</td></tr>`
+    : recordedEmployeesData.map((emp) => `
         <tr style="border-bottom: 1px solid #f1f5f9;">
-          <td style="padding: 8px 16px; font-family: monospace; font-weight: 600; color: #2563eb;">${p.code}</td>
-          <td style="padding: 8px 16px; font-weight: 500; color: #1e293b;">${p.name}</td>
-          <td style="padding: 8px 16px; font-weight: 600; color: #0f172a;">${formatDurationDetailed(p.totalSeconds)}</td>
-          <td style="padding: 8px 16px; font-size: 12px; color: #64748b;">${Array.from(p.contributors).join(', ')}</td>
+          <td style="padding: 14px 16px;">
+            <div style="font-weight: 700; font-size: 14px; color: #0f172a;">${emp.user.name}</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 3px;">
+              <span style="font-family: monospace;">[${emp.user.employeeId}]</span>
+              <span style="color: #2563eb; background: #eff6ff; padding: 1px 6px; border-radius: 4px; margin-left: 6px;">${emp.user.department || 'General'}</span>
+            </div>
+          </td>
+          <td style="padding: 14px 16px; text-align: center;">
+            <span style="display: inline-block; background: #ecfdf5; color: #047857; font-weight: 700; font-size: 13px; padding: 4px 12px; border-radius: 6px;">
+              ${formatDurationDetailed(emp.regularDuration)}
+            </span>
+          </td>
+          <td style="padding: 14px 16px; text-align: center;">
+            <span style="display: inline-block; background: ${emp.outsideHoursDuration > 0 ? '#fef3c7' : '#f8fafc'}; color: ${emp.outsideHoursDuration > 0 ? '#b45309' : '#94a3b8'}; font-weight: 700; font-size: 13px; padding: 4px 12px; border-radius: 6px;">
+              ${formatDurationDetailed(emp.outsideHoursDuration)}
+            </span>
+          </td>
+          <td style="padding: 14px 16px; text-align: right;">
+            <span style="font-weight: 800; font-size: 15px; color: #0f172a;">
+              ${formatDurationDetailed(emp.totalDuration)}
+            </span>
+          </td>
         </tr>
       `).join('');
+
+  // 2. Individual Employee Session Logs (Timings, Duration, Inside/Outside classification, Notes - NO PROJECT!)
+  const employeeSessionDetailsHtml = recordedEmployeesData.length === 0
+    ? ''
+    : `
+      <div style="margin-top: 32px;">
+        <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">
+          <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;">
+            ⏱️ Individual Session Timings
+          </h3>
+          <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">
+            Exact clock-in / clock-out periods and activity classifications logged today.
+          </p>
+        </div>
+
+        ${recordedEmployeesData.map((emp) => {
+          const rows = emp.entries.map((entry) => `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 14px; font-family: monospace; font-size: 12px; color: #334155; white-space: nowrap;">
+                <strong>${formatTimeAmPm(entry.startTime)}</strong> → <strong>${formatTimeAmPm(entry.endTime)}</strong>
+              </td>
+              <td style="padding: 10px 14px; font-weight: 600; color: #0f172a; font-size: 13px; white-space: nowrap;">
+                ${formatDurationDetailed(entry.duration)}
+              </td>
+              <td style="padding: 10px 14px; white-space: nowrap;">
+                ${entry.isOutsideHours
+                  ? `<span style="background: #fef3c7; color: #b45309; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600;">Outside Hours</span>`
+                  : `<span style="background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600;">Inside Hours</span>`
+                }
+              </td>
+              <td style="padding: 10px 14px; font-size: 12px; color: #64748b;">
+                ${entry.notes ? entry.notes : '<span style="color: #cbd5e1; font-style: italic;">No task notes</span>'}
+              </td>
+            </tr>
+          `).join('');
+
+          return `
+            <div style="margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff;">
+              <div style="background: #f8fafc; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <span style="font-weight: 700; font-size: 14px; color: #0f172a;">${emp.user.name}</span>
+                <span style="font-size: 12px; color: #475569;">
+                  Inside: <strong style="color: #047857;">${formatDurationDetailed(emp.regularDuration)}</strong> &nbsp;|&nbsp; 
+                  Outside: <strong style="color: #b45309;">${formatDurationDetailed(emp.outsideHoursDuration)}</strong> &nbsp;|&nbsp; 
+                  Total: <strong style="color: #0f172a;">${formatDurationDetailed(emp.totalDuration)}</strong>
+                </span>
+              </div>
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                  <tr style="background: #ffffff; color: #64748b; text-align: left; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">
+                    <th style="padding: 8px 14px;">Timings (Start → End)</th>
+                    <th style="padding: 8px 14px;">Duration</th>
+                    <th style="padding: 8px 14px;">Classification</th>
+                    <th style="padding: 8px 14px;">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
 
   // Unrecorded employees notice
   const unrecordedHtml = unrecordedEmployees.length > 0
@@ -302,10 +361,10 @@ export async function generateEodEmailHtml(date: Date = new Date()) {
                   EL App Enterprise
                 </span>
                 <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.025em;">
-                  End-of-Day (EOD) Employee Project & Timings Report
+                  End-of-Day (EOD) Operations Report
                 </h1>
                 <p style="margin: 6px 0 0 0; font-size: 13px; color: #94a3b8;">
-                  Operations & Time Ledger for <strong>${formattedDate}</strong>
+                  Operations & Work Hours Ledger for <strong>${formattedDate}</strong>
                 </p>
               </div>
             </div>
@@ -314,7 +373,7 @@ export async function generateEodEmailHtml(date: Date = new Date()) {
           <!-- Body Content -->
           <div style="padding: 28px 32px;">
 
-            <!-- Summary KPI Grid -->
+            <!-- Summary KPI Grid (Total Hours, Active Employees, Inside Hours, Outside Hours) -->
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px;">
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
                 <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Total Hours</div>
@@ -331,63 +390,56 @@ export async function generateEodEmailHtml(date: Date = new Date()) {
               </div>
 
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-                <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Projects Active</div>
-                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px;">
-                  ${projectSummaryList.length}
+                <div style="font-size: 11px; font-weight: 600; color: #047857; text-transform: uppercase;">Inside Hours</div>
+                <div style="font-size: 20px; font-weight: 800; color: #047857; margin-top: 4px;">
+                  ${formatDurationDetailed(insideSeconds)}
                 </div>
               </div>
 
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-                <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Outside Hours</div>
-                <div style="font-size: 20px; font-weight: 800; color: ${report.outsideHoursSeconds > 0 ? '#d97706' : '#0f172a'}; margin-top: 4px;">
+                <div style="font-size: 11px; font-weight: 600; color: #b45309; text-transform: uppercase;">Outside Hours</div>
+                <div style="font-size: 20px; font-weight: 800; color: ${report.outsideHoursSeconds > 0 ? '#d97706' : '#64748b'}; margin-top: 4px;">
                   ${formatDurationDetailed(report.outsideHoursSeconds)}
                 </div>
               </div>
             </div>
 
-            <!-- Detailed Section: Employee Projects & Timings -->
-            <div style="margin-bottom: 32px;">
-              <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">
-                <h2 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 8px;">
-                  <span>📋 Employee Project & Timings Data</span>
+            <!-- Employee Hours Summary Table -->
+            <div style="margin-bottom: 24px;">
+              <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 14px;">
+                <h2 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">
+                  👥 Employee Hours Summary
                 </h2>
                 <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">
-                  Individual session timings, project associations, and task notes logged throughout the day.
+                  Inside hours, outside hours, and total recorded working time per employee.
                 </p>
               </div>
 
-              ${employeeSectionsHtml}
-            </div>
-
-            <!-- Unrecorded Notice -->
-            ${unrecordedHtml}
-
-            <!-- Project Aggregates Summary -->
-            <div style="margin-top: 32px;">
-              <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px;">
-                <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;">
-                  📊 Project Time Distribution Summary
-                </h3>
-              </div>
-              <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff;">
+              <div style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                 <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
                   <thead>
-                    <tr style="background: #f8fafc; color: #64748b; text-align: left; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">
-                      <th style="padding: 10px 16px;">Project Code</th>
-                      <th style="padding: 10px 16px;">Project Name</th>
-                      <th style="padding: 10px 16px;">Total Hours</th>
-                      <th style="padding: 10px 16px;">Contributing Employees</th>
+                    <tr style="background: #f8fafc; color: #475569; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0;">
+                      <th style="padding: 12px 16px;">Employee Name</th>
+                      <th style="padding: 12px 16px; text-align: center;">Inside Hours</th>
+                      <th style="padding: 12px 16px; text-align: center;">Outside Hours</th>
+                      <th style="padding: 12px 16px; text-align: right;">Total Hours</th>
                     </tr>
                   </thead>
                   <tbody>
-                    ${projectSummaryRowsHtml}
+                    ${employeeSummaryRowsHtml}
                   </tbody>
                 </table>
               </div>
             </div>
 
+            <!-- Session Details (Start -> End Timings) -->
+            ${employeeSessionDetailsHtml}
+
+            <!-- Unrecorded Notice -->
+            ${unrecordedHtml}
+
             <!-- Footer Notice -->
-            <div style="margin-top: 36px; pt-20px; border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.6;">
+            <div style="margin-top: 36px; border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.6;">
               <p style="margin: 0;">
                 This End-of-Day (EOD) Operations Summary was automatically compiled and dispatched by <strong>EL App</strong>.
               </p>
@@ -411,7 +463,7 @@ export async function generateEodEmailHtml(date: Date = new Date()) {
       totalHours: formatDurationHours(report.totalTrackedSeconds),
       activeEmployeesCount: recordedEmployeesData.length,
       totalEmployeesCount: allActiveEmployees.length,
-      projectsCount: projectSummaryList.length,
+      insideHours: formatDurationDetailed(insideSeconds),
       outsideHours: formatDurationDetailed(report.outsideHoursSeconds),
     },
   };
@@ -492,48 +544,72 @@ export async function sendWeeklySummaryEmail(targetRecipient?: string) {
   const recipients = targetRecipient ? parseRecipientEmails(targetRecipient) : parseRecipientEmails(settings.recipients);
   const report = await getWeeklyReport({ date: new Date() });
 
-  const projectRows = report.projectBreakdown
-    .map(
-      (p) => `
-    <tr>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;"><strong>${p.project.code}</strong> — ${p.project.name}</td>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;">${formatDurationHours(p.duration)}</td>
+  // Aggregate hours by employee
+  const employeeMap = new Map<string, { name: string; employeeId: string; insideSeconds: number; outsideSeconds: number; totalSeconds: number }>();
+  for (const entry of report.rawEntries || []) {
+    if (!employeeMap.has(entry.userId)) {
+      employeeMap.set(entry.userId, {
+        name: entry.user.name,
+        employeeId: entry.user.employeeId,
+        insideSeconds: 0,
+        outsideSeconds: 0,
+        totalSeconds: 0,
+      });
+    }
+    const emp = employeeMap.get(entry.userId)!;
+    emp.totalSeconds += entry.duration;
+    if (entry.isOutsideHours) emp.outsideSeconds += entry.duration;
+    else emp.insideSeconds += entry.duration;
+  }
+
+  const employeeRows = Array.from(employeeMap.values()).map(
+    (e) => `
+    <tr style="border-bottom: 1px solid #e5e7eb;">
+      <td style="padding: 10px 14px; font-weight: 600; color: #111827;">${e.name} <span style="color: #6b7280; font-size: 11px; font-family: monospace;">[${e.employeeId}]</span></td>
+      <td style="padding: 10px 14px; text-align: center;"><span style="background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.insideSeconds)}</span></td>
+      <td style="padding: 10px 14px; text-align: center;"><span style="background: ${e.outsideSeconds > 0 ? '#fef3c7' : '#f3f4f6'}; color: ${e.outsideSeconds > 0 ? '#b45309' : '#9ca3af'}; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.outsideSeconds)}</span></td>
+      <td style="padding: 10px 14px; text-align: right; font-weight: bold; color: #0f172a;">${formatDurationDetailed(e.totalSeconds)}</td>
     </tr>
   `
-    )
-    .join('');
+  ).join('');
 
   const html = `
     <div style="font-family: sans-serif; max-width: 650px; margin: 0 auto; color: #1f2937;">
-      <h2 style="color: #111827; border-bottom: 2px solid #10b981; padding-bottom: 8px;">EL App — Weekly Project Summary</h2>
+      <h2 style="color: #111827; border-bottom: 2px solid #10b981; padding-bottom: 8px;">EL App — Weekly Operations Summary</h2>
       <p>Period: <strong>${report.weekStart} to ${report.weekEnd}</strong></p>
       
-      <div style="background: #f3f4f6; padding: 12px; border-radius: 6px; margin: 16px 0;">
-        <div style="font-size: 12px; color: #6b7280;">Total Tracked Project Hours</div>
-        <div style="font-size: 20px; font-weight: bold; color: #111827;">${formatDurationHours(report.totalTrackedSeconds)}</div>
+      <div style="background: #f3f4f6; padding: 14px; border-radius: 8px; margin: 16px 0; display: flex; gap: 16px; justify-content: space-around; text-align: center;">
+        <div>
+          <div style="font-size: 11px; color: #6b7280; text-transform: uppercase;">Total Tracked</div>
+          <div style="font-size: 20px; font-weight: bold; color: #111827; margin-top: 2px;">${formatDurationHours(report.totalTrackedSeconds)}</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #047857; text-transform: uppercase;">Inside Hours</div>
+          <div style="font-size: 20px; font-weight: bold; color: #047857; margin-top: 2px;">${formatDurationHours(report.weekInsideSeconds)}</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #b45309; text-transform: uppercase;">Outside Hours</div>
+          <div style="font-size: 20px; font-weight: bold; color: #b45309; margin-top: 2px;">${formatDurationHours(report.weekOutsideSeconds)}</div>
+        </div>
       </div>
 
-      ${
-        report.highestProjectTime
-          ? `<p>⭐ <strong>Highest Project Time:</strong> ${report.highestProjectTime.user.name} on <em>${report.highestProjectTime.project.name}</em> (${formatDurationHours(report.highestProjectTime.duration)})</p>`
-          : ''
-      }
-
-      <h3>Project Breakdown</h3>
-      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+      <h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">👥 Employee Hours Breakdown</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
         <thead>
-          <tr style="background: #f9fafb; text-align: left;">
-            <th style="padding: 8px 12px;">Project</th>
-            <th style="padding: 8px 12px;">Tracked Hours</th>
+          <tr style="background: #f9fafb; text-align: left; border-bottom: 1px solid #e5e7eb;">
+            <th style="padding: 10px 14px;">Employee</th>
+            <th style="padding: 10px 14px; text-align: center;">Inside Hours</th>
+            <th style="padding: 10px 14px; text-align: center;">Outside Hours</th>
+            <th style="padding: 10px 14px; text-align: right;">Total Hours</th>
           </tr>
         </thead>
         <tbody>
-          ${projectRows || '<tr><td colspan="2" style="padding: 12px; text-align: center; color: #6b7280;">No projects tracked this week.</td></tr>'}
+          ${employeeRows || '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #6b7280;">No hours tracked this week.</td></tr>'}
         </tbody>
       </table>
       
-      <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
-        Generated automatically by EL App — Employee Project Time Tracking System.
+      <p style="margin-top: 24px; font-size: 11px; color: #9ca3af; text-align: center;">
+        Generated automatically by EL App — Employee Time Tracking System.
       </p>
     </div>
   `;
@@ -542,7 +618,7 @@ export async function sendWeeklySummaryEmail(targetRecipient?: string) {
     if (r) {
       await sendEmailNotification({
         to: r,
-        subject: `[EL App] Weekly Project Summary — ${report.weekStart} to ${report.weekEnd}`,
+        subject: `[EL App] Weekly Operations Summary — ${report.weekStart} to ${report.weekEnd}`,
         html,
         type: 'WEEKLY_SUMMARY',
       });
@@ -576,12 +652,14 @@ export async function sendMonthlySummaryEmail(targetRecipient?: string | string[
 
   const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-  const projectRows = (report.projectBreakdown || [])
+  const employeeRows = (report.employeeBreakdown || [])
     .map(
-      (p) => `
-    <tr>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;"><strong>${p.project.code}</strong> — ${p.project.name}</td>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;">${formatDurationHours(p.duration)}</td>
+      (e) => `
+    <tr style="border-bottom: 1px solid #e5e7eb;">
+      <td style="padding: 10px 14px; font-weight: 600; color: #111827;">${e.user.name} <span style="color: #6b7280; font-size: 11px; font-family: monospace;">[${e.user.employeeId}]</span></td>
+      <td style="padding: 10px 14px; text-align: center;"><span style="background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.regularDuration)}</span></td>
+      <td style="padding: 10px 14px; text-align: center;"><span style="background: ${e.outsideHoursDuration > 0 ? '#fef3c7' : '#f3f4f6'}; color: ${e.outsideHoursDuration > 0 ? '#b45309' : '#9ca3af'}; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.outsideHoursDuration)}</span></td>
+      <td style="padding: 10px 14px; text-align: right; font-weight: bold; color: #0f172a;">${formatDurationDetailed(e.totalDuration)}</td>
     </tr>
   `
     )
@@ -592,27 +670,38 @@ export async function sendMonthlySummaryEmail(targetRecipient?: string | string[
       <h2 style="color: #111827; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;">EL App — Monthly Operations Summary (${monthName})</h2>
       <p>Period: <strong>${monthStart.toLocaleDateString()} to ${monthEnd.toLocaleDateString()}</strong></p>
       
-      <div style="background: #f3f4f6; padding: 14px; border-radius: 8px; margin: 16px 0;">
-        <div style="font-size: 12px; color: #6b7280;">Total Monthly Output</div>
-        <div style="font-size: 24px; font-weight: bold; color: #111827;">${formatDurationHours(report.totalTrackedSeconds)}</div>
-        <div style="font-size: 12px; color: #4b5563; margin-top: 4px;">Total Logs: ${report.totalEntriesCount} records across all employees</div>
+      <div style="background: #f3f4f6; padding: 14px; border-radius: 8px; margin: 16px 0; display: flex; gap: 16px; justify-content: space-around; text-align: center;">
+        <div>
+          <div style="font-size: 11px; color: #6b7280; text-transform: uppercase;">Total Hours</div>
+          <div style="font-size: 20px; font-weight: bold; color: #111827; margin-top: 2px;">${formatDurationHours(report.totalTrackedSeconds)}</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #047857; text-transform: uppercase;">Inside Hours</div>
+          <div style="font-size: 20px; font-weight: bold; color: #047857; margin-top: 2px;">${formatDurationHours(report.regularSeconds)}</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #b45309; text-transform: uppercase;">Outside Hours</div>
+          <div style="font-size: 20px; font-weight: bold; color: #b45309; margin-top: 2px;">${formatDurationHours(report.outsideHoursSeconds)}</div>
+        </div>
       </div>
 
-      <h3>Project Hours Breakdown</h3>
-      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+      <h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">👥 Employee Hours Breakdown</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
         <thead>
-          <tr style="background: #f9fafb; text-align: left;">
-            <th style="padding: 8px 12px;">Project</th>
-            <th style="padding: 8px 12px;">Tracked Hours</th>
+          <tr style="background: #f9fafb; text-align: left; border-bottom: 1px solid #e5e7eb;">
+            <th style="padding: 10px 14px;">Employee</th>
+            <th style="padding: 10px 14px; text-align: center;">Inside Hours</th>
+            <th style="padding: 10px 14px; text-align: center;">Outside Hours</th>
+            <th style="padding: 10px 14px; text-align: right;">Total Hours</th>
           </tr>
         </thead>
         <tbody>
-          ${projectRows || '<tr><td colspan="2" style="padding: 12px; text-align: center; color: #6b7280;">No project activity recorded this month.</td></tr>'}
+          ${employeeRows || '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #6b7280;">No employee activity recorded this month.</td></tr>'}
         </tbody>
       </table>
       
-      <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
-        Generated automatically by EL App — Employee Project Time Tracking System.
+      <p style="margin-top: 24px; font-size: 11px; color: #9ca3af; text-align: center;">
+        Generated automatically by EL App — Employee Time Tracking System.
       </p>
     </div>
   `;
@@ -681,12 +770,14 @@ export async function sendCustomDateRangeReportEmail({
 
   const report = await getCustomReport({ startDate: start, endDate: end });
 
-  const projectRows = (report.projectBreakdown || [])
+  const employeeRows = (report.employeeBreakdown || [])
     .map(
-      (p) => `
-    <tr>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;"><strong>${p.project.code}</strong> — ${p.project.name}</td>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;">${formatDurationHours(p.duration)}</td>
+      (e) => `
+    <tr style="border-bottom: 1px solid #e5e7eb;">
+      <td style="padding: 10px 14px; font-weight: 600; color: #111827;">${e.user.name} <span style="color: #6b7280; font-size: 11px; font-family: monospace;">[${e.user.employeeId}]</span></td>
+      <td style="padding: 10px 14px; text-align: center;"><span style="background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.regularDuration)}</span></td>
+      <td style="padding: 10px 14px; text-align: center;"><span style="background: ${e.outsideHoursDuration > 0 ? '#fef3c7' : '#f3f4f6'}; color: ${e.outsideHoursDuration > 0 ? '#b45309' : '#9ca3af'}; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.outsideHoursDuration)}</span></td>
+      <td style="padding: 10px 14px; text-align: right; font-weight: bold; color: #0f172a;">${formatDurationDetailed(e.totalDuration)}</td>
     </tr>
   `
     )
@@ -694,30 +785,41 @@ export async function sendCustomDateRangeReportEmail({
 
   const html = `
     <div style="font-family: sans-serif; max-width: 650px; margin: 0 auto; color: #1f2937;">
-      <h2 style="color: #111827; border-bottom: 2px solid #2563eb; padding-bottom: 8px;">EL App — Manual Activity Report</h2>
+      <h2 style="color: #111827; border-bottom: 2px solid #2563eb; padding-bottom: 8px;">EL App — Operations Activity Report</h2>
       <p>Report Range: <strong>${startDate} to ${endDate}</strong></p>
       
-      <div style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 14px; border-radius: 8px; margin: 16px 0;">
-        <div style="font-size: 12px; color: #0284c7; font-weight: 600;">Total Tracked Hours in Selected Range</div>
-        <div style="font-size: 24px; font-weight: bold; color: #0369a1;">${formatDurationHours(report.totalTrackedSeconds)}</div>
-        <div style="font-size: 12px; color: #075985; margin-top: 4px;">Regular Hours: ${formatDurationHours(report.regularSeconds)} | Outside Hours: ${formatDurationHours(report.outsideHoursSeconds)}</div>
+      <div style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 14px; border-radius: 8px; margin: 16px 0; display: flex; gap: 16px; justify-content: space-around; text-align: center;">
+        <div>
+          <div style="font-size: 11px; color: #0284c7; text-transform: uppercase;">Total Hours</div>
+          <div style="font-size: 20px; font-weight: bold; color: #0369a1; margin-top: 2px;">${formatDurationHours(report.totalTrackedSeconds)}</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #047857; text-transform: uppercase;">Inside Hours</div>
+          <div style="font-size: 20px; font-weight: bold; color: #047857; margin-top: 2px;">${formatDurationHours(report.regularSeconds)}</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #b45309; text-transform: uppercase;">Outside Hours</div>
+          <div style="font-size: 20px; font-weight: bold; color: #b45309; margin-top: 2px;">${formatDurationHours(report.outsideHoursSeconds)}</div>
+        </div>
       </div>
 
-      <h3>Project Summary</h3>
-      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+      <h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">👥 Employee Hours Breakdown</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
         <thead>
-          <tr style="background: #f8fafc; text-align: left;">
-            <th style="padding: 8px 12px;">Project</th>
-            <th style="padding: 8px 12px;">Tracked Hours</th>
+          <tr style="background: #f8fafc; text-align: left; border-bottom: 1px solid #e5e7eb;">
+            <th style="padding: 10px 14px;">Employee</th>
+            <th style="padding: 10px 14px; text-align: center;">Inside Hours</th>
+            <th style="padding: 10px 14px; text-align: center;">Outside Hours</th>
+            <th style="padding: 10px 14px; text-align: right;">Total Hours</th>
           </tr>
         </thead>
         <tbody>
-          ${projectRows || '<tr><td colspan="2" style="padding: 12px; text-align: center; color: #6b7280;">No time entries in this range.</td></tr>'}
+          ${employeeRows || '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #6b7280;">No time entries in this range.</td></tr>'}
         </tbody>
       </table>
       
-      <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
-        Report generated and sent from EL App — Employee Project Time Tracking System.
+      <p style="margin-top: 24px; font-size: 11px; color: #9ca3af; text-align: center;">
+        Report generated and sent from EL App — Employee Time Tracking System.
       </p>
     </div>
   `;

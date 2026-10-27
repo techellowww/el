@@ -9,6 +9,7 @@ import {
   sendMonthlySummaryEmail,
   sendCustomDateRangeReportEmail,
   parseRecipientEmails,
+  testSmtpConnection,
 } from '../lib/emailService';
 import { getCustomReport, formatDurationHours } from '../lib/reportEngine';
 
@@ -26,10 +27,40 @@ router.get('/settings', authenticate, requireAdmin, async (req: AuthRequest, res
         take: 100,
       }),
     ]);
-    res.json({ settings, deliveryLogs });
+    res.json({
+      settings,
+      deliveryLogs,
+      envDefaults: {
+        smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
+        smtpPort: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587,
+        smtpUser: process.env.SMTP_USER || '',
+        smtpFrom: process.env.SMTP_FROM || 'EL App Notifications <notifications@elapp.local>',
+        hasEnvPass: Boolean(process.env.SMTP_PASS),
+      },
+    });
   } catch (error) {
     console.error('Error fetching email settings:', error);
     res.status(500).json({ error: 'Failed to retrieve email settings' });
+  }
+});
+
+// POST /api/mail/test-connection
+router.post('/test-connection', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { host, port, user, pass } = req.body || {};
+    const result = await testSmtpConnection({ host, port, user, pass });
+    if (result.success) {
+      res.json({ success: true, message: result.message });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error,
+        guidance: result.guidance,
+      });
+    }
+  } catch (error) {
+    console.error('Error testing SMTP connection:', error);
+    res.status(500).json({ success: false, error: 'Internal server error while testing SMTP connection.' });
   }
 });
 
@@ -179,9 +210,11 @@ router.post('/generate-report', authenticate, requireAdmin, async (req: AuthRequ
         totalTrackedSeconds: report.totalTrackedSeconds,
         totalHoursFormatted: formatDurationHours(report.totalTrackedSeconds),
         regularSeconds: report.regularSeconds,
+        regularHoursFormatted: formatDurationHours(report.regularSeconds),
         outsideHoursSeconds: report.outsideHoursSeconds,
+        outsideHoursFormatted: formatDurationHours(report.outsideHoursSeconds),
         totalEntriesCount: report.totalEntriesCount,
-        projectBreakdown: report.projectBreakdown,
+        employeeBreakdown: report.employeeBreakdown || [],
         dailyBreakdown: report.dailyBreakdown,
       },
     });

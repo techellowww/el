@@ -324,6 +324,12 @@ export async function getCustomReport(filters: ReportFilterOptions) {
 
   const dailyBreakdown = new Map<string, { date: string; duration: number; regular: number; outside: number }>();
   const projectMap = new Map<string, { code: string; name: string; totalSeconds: number }>();
+  const employeeMap = new Map<string, {
+    user: { id: string; name: string; employeeId: string; department: string | null };
+    totalDuration: number;
+    regularDuration: number;
+    outsideHoursDuration: number;
+  }>();
 
   for (const entry of entries) {
     const dur = entry.duration;
@@ -348,7 +354,30 @@ export async function getCustomReport(filters: ReportFilterOptions) {
       });
     }
     projectMap.get(entry.projectId)!.totalSeconds += dur;
+
+    if (!employeeMap.has(entry.userId)) {
+      employeeMap.set(entry.userId, {
+        user: entry.user,
+        totalDuration: 0,
+        regularDuration: 0,
+        outsideHoursDuration: 0,
+      });
+    }
+    const emp = employeeMap.get(entry.userId)!;
+    emp.totalDuration += dur;
+    if (entry.isOutsideHours) emp.outsideHoursDuration += dur;
+    else emp.regularDuration += dur;
   }
+
+  const employeeBreakdown = Array.from(employeeMap.values()).map((e) => ({
+    user: e.user,
+    totalDuration: e.totalDuration,
+    regularDuration: e.regularDuration,
+    outsideHoursDuration: e.outsideHoursDuration,
+    totalHoursFormatted: formatDurationHours(e.totalDuration),
+    regularHoursFormatted: formatDurationHours(e.regularDuration),
+    outsideHoursFormatted: formatDurationHours(e.outsideHoursDuration),
+  }));
 
   const projectBreakdown = Array.from(projectMap.values()).map((p) => ({
     project: { code: p.code, name: p.name },
@@ -378,6 +407,7 @@ export async function getCustomReport(filters: ReportFilterOptions) {
     dailyTimeline,
     dailyBreakdown: dailyBreakdownList,
     projectBreakdown,
+    employeeBreakdown,
     entries,
   };
 }

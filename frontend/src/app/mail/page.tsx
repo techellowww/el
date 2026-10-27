@@ -24,6 +24,7 @@ import {
   ChevronUp,
   Download,
   Info,
+  ExternalLink,
 } from 'lucide-react';
 import { TimePicker12h } from '@/components/TimePicker12h';
 
@@ -47,13 +48,18 @@ interface GeneratedReport {
   totalTrackedSeconds: number;
   totalHoursFormatted: string;
   regularSeconds: number;
+  regularHoursFormatted?: string;
   outsideHoursSeconds: number;
+  outsideHoursFormatted?: string;
   totalEntriesCount: number;
-  projectBreakdown?: Array<{
-    code: string;
-    name: string;
-    totalSeconds: number;
-    hoursFormatted: string;
+  employeeBreakdown?: Array<{
+    user: { id: string; name: string; employeeId: string; department?: string | null };
+    totalDuration?: number;
+    regularDuration?: number;
+    outsideHoursDuration?: number;
+    totalHoursFormatted: string;
+    regularHoursFormatted: string;
+    outsideHoursFormatted: string;
   }>;
   dailyBreakdown?: Array<{
     date: string;
@@ -85,6 +91,13 @@ export default function MailModulePage() {
   const [smtpPass, setSmtpPass] = useState('');
   const [smtpFrom, setSmtpFrom] = useState('EL App Notifications <notifications@elapp.local>');
   const [showSmtpConfig, setShowSmtpConfig] = useState(true);
+  const [hasEnvPass, setHasEnvPass] = useState(false);
+  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{
+    success: boolean;
+    message: string;
+    guidance?: string;
+  } | null>(null);
 
   // 4.2 Mail Audit List
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
@@ -133,6 +146,9 @@ export default function MailModulePage() {
       const res = await fetch('/api/mail/settings');
       if (res.ok) {
         const data = await res.json();
+        if (data.envDefaults) {
+          setHasEnvPass(Boolean(data.envDefaults.hasEnvPass));
+        }
         if (data.settings) {
           setEnabled(data.settings.enabled ?? true);
           setScheduleType(
@@ -146,11 +162,11 @@ export default function MailModulePage() {
           const parsed = parseEmails(rawRecipients);
           setRecipientList(parsed.length > 0 ? parsed : ['admin@company.com']);
 
-          setSmtpHost(data.settings.smtpHost || 'smtp.gmail.com');
-          setSmtpPort(data.settings.smtpPort || 587);
-          setSmtpUser(data.settings.smtpUser || '');
+          setSmtpHost(data.settings.smtpHost || data.envDefaults?.smtpHost || 'smtp.gmail.com');
+          setSmtpPort(data.settings.smtpPort || data.envDefaults?.smtpPort || 587);
+          setSmtpUser(data.settings.smtpUser || data.envDefaults?.smtpUser || '');
           setSmtpPass(data.settings.smtpPass || '');
-          setSmtpFrom(data.settings.smtpFrom || 'EL App Notifications <notifications@elapp.local>');
+          setSmtpFrom(data.settings.smtpFrom || data.envDefaults?.smtpFrom || 'EL App Notifications <notifications@elapp.local>');
         }
       }
     } catch (err) {
@@ -245,6 +261,46 @@ export default function MailModulePage() {
       setMessage({ type: 'error', text: 'Network error while saving settings.' });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Test SMTP Connection
+  const handleTestSmtpConnection = async () => {
+    setIsTestingSmtp(true);
+    setSmtpTestResult(null);
+
+    try {
+      const res = await fetch('/api/mail/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          host: smtpHost,
+          port: smtpPort,
+          user: smtpUser,
+          pass: smtpPass,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSmtpTestResult({
+          success: true,
+          message: data.message || 'SMTP connection tested and verified successfully!',
+        });
+      } else {
+        setSmtpTestResult({
+          success: false,
+          message: data.error || 'SMTP authentication failed.',
+          guidance: data.guidance,
+        });
+      }
+    } catch {
+      setSmtpTestResult({
+        success: false,
+        message: 'Network error communicating with the SMTP test endpoint.',
+      });
+    } finally {
+      setIsTestingSmtp(false);
     }
   };
 
@@ -893,40 +949,57 @@ export default function MailModulePage() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-center">
+                  <div className="grid grid-cols-3 gap-2 text-center">
                     <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800/80">
                       <p className="text-[10px] text-slate-400 uppercase font-semibold">Total Hours</p>
-                      <p className="text-lg font-mono font-bold text-white mt-0.5">
+                      <p className="text-base font-mono font-bold text-white mt-0.5">
                         {generatedReport.totalHoursFormatted}
                       </p>
                     </div>
                     <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800/80">
-                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Total Entries</p>
-                      <p className="text-lg font-mono font-bold text-white mt-0.5">
-                        {generatedReport.totalEntriesCount}
+                      <p className="text-[10px] text-emerald-400 uppercase font-semibold">Inside Hours</p>
+                      <p className="text-base font-mono font-bold text-emerald-300 mt-0.5">
+                        {generatedReport.regularHoursFormatted || '0.00 hrs'}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800/80">
+                      <p className="text-[10px] text-amber-400 uppercase font-semibold">Outside Hours</p>
+                      <p className="text-base font-mono font-bold text-amber-300 mt-0.5">
+                        {generatedReport.outsideHoursFormatted || '0.00 hrs'}
                       </p>
                     </div>
                   </div>
 
-                  {/* Project Breakdown */}
-                  {generatedReport.projectBreakdown && generatedReport.projectBreakdown.length > 0 && (
+                  {/* Employee Hours Breakdown */}
+                  {generatedReport.employeeBreakdown && generatedReport.employeeBreakdown.length > 0 ? (
                     <div className="space-y-1.5 pt-2 border-t border-slate-800">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        Project Breakdown
+                        Employee Hours Breakdown
                       </p>
-                      <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                        {generatedReport.projectBreakdown.map((p) => (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {generatedReport.employeeBreakdown.map((emp) => (
                           <div
-                            key={p.code}
-                            className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-900/60"
+                            key={emp.user.id}
+                            className="flex items-center justify-between text-xs py-2 px-2.5 rounded-lg bg-slate-900/80 border border-slate-800/60"
                           >
-                            <span className="text-slate-300 truncate max-w-[140px]">
-                              {p.code} • {p.name}
-                            </span>
-                            <span className="font-mono text-blue-300 font-semibold">{p.hoursFormatted}</span>
+                            <div>
+                              <span className="font-semibold text-white block">{emp.user.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">[{emp.user.employeeId}]</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-mono text-white font-bold block">{emp.totalHoursFormatted}</span>
+                              <span className="text-[10px] text-slate-400">
+                                <span className="text-emerald-400">Inside: {emp.regularHoursFormatted}</span> &nbsp;•&nbsp; 
+                                <span className="text-amber-400">Outside: {emp.outsideHoursFormatted}</span>
+                              </span>
+                            </div>
                           </div>
                         ))}
                       </div>
+                    </div>
+                  ) : (
+                    <div className="pt-2 border-t border-slate-800 text-center text-xs text-slate-500 py-2">
+                      No employee activity recorded in this date range.
                     </div>
                   )}
                 </div>
@@ -1070,6 +1143,76 @@ export default function MailModulePage() {
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                     />
                   </div>
+
+                  {/* Gmail Helper Banner */}
+                  {smtpHost.toLowerCase().includes('gmail.com') && (
+                    <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-600/30 text-amber-200 text-xs flex items-start gap-2.5">
+                      <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-semibold text-amber-300">Google Gmail Authentication Requirements:</p>
+                        <p className="text-slate-300 leading-relaxed">
+                          Gmail SMTP strictly requires a <strong>16-character Google App Password</strong> (with 2-Step Verification enabled). Normal Google account passwords are rejected with <em>535-5.7.8 BadCredentials</em>.
+                        </p>
+                        <div>
+                          <a
+                            href="https://myaccount.google.com/apppasswords"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 underline font-medium mt-1"
+                          >
+                            <span>Generate 16-character App Password in Google Account</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Test Connection Button & Status */}
+                  <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      id="test-smtp-connection-btn"
+                      data-testid="test-smtp-connection-btn"
+                      onClick={handleTestSmtpConnection}
+                      disabled={isTestingSmtp || !isAdmin}
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold flex items-center gap-2 border border-slate-700 transition cursor-pointer self-start disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isTestingSmtp ? 'animate-spin text-blue-400' : 'text-slate-400'}`} />
+                      <span>{isTestingSmtp ? 'Verifying SMTP Server...' : 'Test SMTP Connection'}</span>
+                    </button>
+
+                    <span className="text-[11px] text-slate-500">
+                      {hasEnvPass && !smtpPass ? 'Using environment password default' : 'Using form password'}
+                    </span>
+                  </div>
+
+                  {/* Test Connection Output */}
+                  {smtpTestResult && (
+                    <div
+                      className={`p-3.5 rounded-xl border text-xs animate-in fade-in duration-200 ${
+                        smtpTestResult.success
+                          ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+                          : 'bg-red-950/40 border-red-500/30 text-red-300'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        {smtpTestResult.success ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        )}
+                        <div className="space-y-1 overflow-hidden">
+                          <p className="font-semibold break-words">{smtpTestResult.message}</p>
+                          {smtpTestResult.guidance && (
+                            <p className="text-amber-300/90 text-[11px] leading-relaxed pt-1">
+                              💡 <strong>Tip:</strong> {smtpTestResult.guidance}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1242,6 +1385,29 @@ export default function MailModulePage() {
                   {selectedErrorLog.error || 'Unknown delivery failure'}
                 </div>
               </div>
+
+              {(selectedErrorLog.error?.includes('535') || selectedErrorLog.error?.includes('BadCredentials')) && (
+                <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-500/30 text-amber-200 text-xs space-y-1.5">
+                  <div className="flex items-center gap-1.5 font-semibold text-amber-300">
+                    <Info className="w-4 h-4 text-amber-400" />
+                    <span>How to fix Google 535-5.7.8 BadCredentials:</span>
+                  </div>
+                  <p className="text-slate-300 leading-relaxed text-[11px]">
+                    Google SMTP requires a <strong>16-character App Password</strong> (with 2-Step Verification active). Standard Gmail account passwords will always fail. If you changed your Google account password recently, old App Passwords are automatically revoked.
+                  </p>
+                  <div>
+                    <a
+                      href="https://myaccount.google.com/apppasswords"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 underline font-medium text-[11px]"
+                    >
+                      <span>Create new App Password at Google</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end pt-2">
                 <button
