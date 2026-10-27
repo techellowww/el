@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate, requireAdmin, AuthRequest } from '../lib/auth';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, format } from 'date-fns';
+import { getOfficeSchedule } from '../lib/timerEngine';
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.get('/', authenticate, requireAdmin, async (req: AuthRequest, res: Respon
       topEmployeesData,
       projectDistributionData,
     ] = await Promise.all([
-      prisma.user.count({ where: { role: 'EMPLOYEE', isActive: true } }),
+      prisma.user.count({ where: { role: 'EMPLOYEE' } }),
       prisma.project.count({ where: { status: 'ACTIVE' } }),
       prisma.project.count({ where: { status: 'COMPLETED' } }),
       prisma.timeEntry.findMany({
@@ -50,9 +51,9 @@ router.get('/', authenticate, requireAdmin, async (req: AuthRequest, res: Respon
         where: { startTime: { gte: weekStart, lte: weekEnd }, isDeleted: false },
         _sum: { duration: true },
       }),
-      prisma.timeEntry.aggregate({
+      prisma.timeEntry.findMany({
         where: { startTime: { gte: monthStart, lte: monthEnd }, isDeleted: false },
-        _sum: { duration: true },
+        select: { startTime: true, endTime: true, duration: true, isOutsideHours: true },
       }),
       prisma.timeEntry.groupBy({
         by: ['userId'],
@@ -120,6 +121,68 @@ router.get('/', authenticate, requireAdmin, async (req: AuthRequest, res: Respon
       };
     });
 
+    // Calculate Current Month Inside Hours vs Outside Hours timing breakdown
+    const schedule = await getOfficeSchedule();
+    let monthInsideSeconds = 0;
+    let monthOutsideSeconds = 0;
+
+    for (const entry of monthEntries) {
+      if (entry.isOutsideHours) {
+        monthOutsideSeconds += entry.duration;
+      } else if (schedule?.closingTime) {
+        try {
+          const start = new Date(entry.startTime);
+          const end = entry.endTime ? new Date(entry.endTime) : new Date(start.getTime() + entry.duration * 1000);
+          const [closeH, closeM] = schedule.closingTime.split(':').map(Number);
+          const closingDate = new Date(start);
+          closingDate.setHours(closeH, closeM, 0, 0);
+
+          if (end.getTime() <= closingDate.getTime()) {
+            monthInsideSeconds += entry.duration;
+          } else if (start.getTime() >= closingDate.getTime()) {
+            monthOutsideSeconds += entry.duration;
+          } else {
+            const insideMs = Math.max(0, closingDate.getTime() - start.getTime());
+            const insideSec = Math.min(entry.duration, Math.round(insideMs / 1000));
+            const outsideSec = Math.max(0, entry.duration - insideSec);
+            monthInsideSeconds += insideSec;
+            monthOutsideSeconds += outsideSec;
+          }
+        } catch {
+          monthInsideSeconds += entry.duration;
+        }
+      } else {
+        monthInsideSeconds += entry.duration;
+      }
+    }
+
+    const monthInsideHours = Number((monthInsideSeconds / 3600).toFixed(2));
+    const monthOutsideHours = Number((monthOutsideSeconds / 3600).toFixed(2));
+    const monthTotalSeconds = monthInsideSeconds + monthOutsideSeconds;
+    const monthTotalHours = Number((monthTotalSeconds / 3600).toFixed(2));
+
+    const insidePct = monthTotalSeconds > 0 ? Math.round((monthInsideSeconds / monthTotalSeconds) * 100) : 0;
+    const outsidePct = monthTotalSeconds > 0 ? 100 - insidePct : 0;
+
+    const monthTimingPieChart = [
+      {
+        name: 'Inside Timing',
+        label: 'Inside Office Hours',
+        hours: monthInsideHours,
+        seconds: monthInsideSeconds,
+        percent: insidePct,
+        color: '#10b981',
+      },
+      {
+        name: 'Outside Timing',
+        label: 'Outside Hours (Overtime)',
+        hours: monthOutsideHours,
+        seconds: monthOutsideSeconds,
+        percent: outsidePct,
+        color: '#f59e0b',
+      },
+    ];
+
     const past7DaysStart = startOfDay(subDays(now, 6));
     const recentEntries = await prisma.timeEntry.findMany({
       where: { startTime: { gte: past7DaysStart, lte: todayEnd }, isDeleted: false },
@@ -161,7 +224,9 @@ router.get('/', authenticate, requireAdmin, async (req: AuthRequest, res: Respon
         completedProjects: completedProjectsCount,
         todayHours: Number(((todayEntries._sum.duration || 0) / 3600).toFixed(2)),
         weekHours: Number(((weekEntries._sum.duration || 0) / 3600).toFixed(2)),
-        monthHours: Number(((monthEntries._sum.duration || 0) / 3600).toFixed(2)),
+        monthHours: monthTotalHours,
+        monthInsideHours,
+        monthOutsideHours,
         activeTimersCount: runningTimers.length,
         pendingCorrections: pendingCorrectionsCount,
         outsideHoursReview: outsideHoursReviewCount,
@@ -173,6 +238,7 @@ router.get('/', authenticate, requireAdmin, async (req: AuthRequest, res: Respon
         startTime: t.startTime,
       })),
       charts: {
+        monthTimingPieChart,
         topProjectsPieChart,
         dailyTrendChart,
         projectDistributionChart,

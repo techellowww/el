@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { prisma } from './prisma';
-import { getDailyReport, getWeeklyReport, formatDurationHours } from './reportEngine';
+import { getDailyReport, getWeeklyReport, getCustomReport, formatDurationHours } from './reportEngine';
+import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
 
 export function formatDurationDetailed(seconds: number): string {
   if (!seconds || seconds <= 0) return '0m';
@@ -550,3 +551,285 @@ export async function sendWeeklySummaryEmail(targetRecipient?: string) {
 
   return { success: true, count: recipients.length };
 }
+
+/**
+ * Generates and delivers the Monthly Summary email.
+ */
+export async function sendMonthlySummaryEmail(targetRecipient?: string | string[]) {
+  const settings = await getEmailSettings();
+  const recipientList = targetRecipient
+    ? parseRecipientEmails(targetRecipient)
+    : parseRecipientEmails(settings?.recipients);
+
+  if (recipientList.length === 0) {
+    return { success: false, error: 'No recipient email addresses configured.' };
+  }
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  const report = await getCustomReport({
+    startDate: monthStart,
+    endDate: monthEnd,
+  });
+
+  const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  const projectRows = (report.projectBreakdown || [])
+    .map(
+      (p) => `
+    <tr>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;"><strong>${p.project.code}</strong> — ${p.project.name}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;">${formatDurationHours(p.duration)}</td>
+    </tr>
+  `
+    )
+    .join('');
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 650px; margin: 0 auto; color: #1f2937;">
+      <h2 style="color: #111827; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;">EL App — Monthly Operations Summary (${monthName})</h2>
+      <p>Period: <strong>${monthStart.toLocaleDateString()} to ${monthEnd.toLocaleDateString()}</strong></p>
+      
+      <div style="background: #f3f4f6; padding: 14px; border-radius: 8px; margin: 16px 0;">
+        <div style="font-size: 12px; color: #6b7280;">Total Monthly Output</div>
+        <div style="font-size: 24px; font-weight: bold; color: #111827;">${formatDurationHours(report.totalTrackedSeconds)}</div>
+        <div style="font-size: 12px; color: #4b5563; margin-top: 4px;">Total Logs: ${report.totalEntriesCount} records across all employees</div>
+      </div>
+
+      <h3>Project Hours Breakdown</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <thead>
+          <tr style="background: #f9fafb; text-align: left;">
+            <th style="padding: 8px 12px;">Project</th>
+            <th style="padding: 8px 12px;">Tracked Hours</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${projectRows || '<tr><td colspan="2" style="padding: 12px; text-align: center; color: #6b7280;">No project activity recorded this month.</td></tr>'}
+        </tbody>
+      </table>
+      
+      <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
+        Generated automatically by EL App — Employee Project Time Tracking System.
+      </p>
+    </div>
+  `;
+
+  const results: Array<{ recipient: string; status: string; logId: string; error: string | null }> = [];
+  for (const r of recipientList) {
+    const log = await sendEmailNotification({
+      to: r,
+      subject: `[EL App] Monthly Operations Report — ${monthName}`,
+      html,
+      type: 'MONTHLY_SUMMARY',
+    });
+    results.push({
+      recipient: r,
+      status: log.status,
+      logId: log.id,
+      error: log.error,
+    });
+  }
+
+  const sentCount = results.filter((r) => r.status === 'SENT' || r.status === 'SIMULATED').length;
+  const failedCount = results.filter((r) => r.status === 'FAILED').length;
+
+  return {
+    success: sentCount > 0,
+    sentCount,
+    failedCount,
+    recipients: recipientList,
+    results,
+  };
+}
+
+/**
+ * Generates and delivers a Custom Date-Range Report email manually requested by an Administrator.
+ */
+export async function sendCustomDateRangeReportEmail({
+  startDate,
+  endDate,
+  recipients: customRecipients,
+}: {
+  startDate: string;
+  endDate: string;
+  recipients?: string | string[];
+}) {
+  const settings = await getEmailSettings();
+  const recipientList = customRecipients
+    ? parseRecipientEmails(customRecipients)
+    : parseRecipientEmails(settings?.recipients);
+
+  if (recipientList.length === 0) {
+    return { success: false, error: 'No recipient email addresses provided or configured.' };
+  }
+
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return { success: false, error: 'Invalid start date or end date format.' };
+  }
+
+  if (end < start) {
+    return { success: false, error: 'End date must be on or after start date.' };
+  }
+
+  const report = await getCustomReport({ startDate: start, endDate: end });
+
+  const projectRows = (report.projectBreakdown || [])
+    .map(
+      (p) => `
+    <tr>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;"><strong>${p.project.code}</strong> — ${p.project.name}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;">${formatDurationHours(p.duration)}</td>
+    </tr>
+  `
+    )
+    .join('');
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 650px; margin: 0 auto; color: #1f2937;">
+      <h2 style="color: #111827; border-bottom: 2px solid #2563eb; padding-bottom: 8px;">EL App — Manual Activity Report</h2>
+      <p>Report Range: <strong>${startDate} to ${endDate}</strong></p>
+      
+      <div style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 14px; border-radius: 8px; margin: 16px 0;">
+        <div style="font-size: 12px; color: #0284c7; font-weight: 600;">Total Tracked Hours in Selected Range</div>
+        <div style="font-size: 24px; font-weight: bold; color: #0369a1;">${formatDurationHours(report.totalTrackedSeconds)}</div>
+        <div style="font-size: 12px; color: #075985; margin-top: 4px;">Regular Hours: ${formatDurationHours(report.regularSeconds)} | Outside Hours: ${formatDurationHours(report.outsideHoursSeconds)}</div>
+      </div>
+
+      <h3>Project Summary</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <thead>
+          <tr style="background: #f8fafc; text-align: left;">
+            <th style="padding: 8px 12px;">Project</th>
+            <th style="padding: 8px 12px;">Tracked Hours</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${projectRows || '<tr><td colspan="2" style="padding: 12px; text-align: center; color: #6b7280;">No time entries in this range.</td></tr>'}
+        </tbody>
+      </table>
+      
+      <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
+        Report generated and sent from EL App — Employee Project Time Tracking System.
+      </p>
+    </div>
+  `;
+
+  const results: Array<{ recipient: string; status: string; logId: string; error: string | null }> = [];
+  for (const r of recipientList) {
+    const log = await sendEmailNotification({
+      to: r,
+      subject: `[EL App] Activity Report (${startDate} to ${endDate})`,
+      html,
+      type: 'MANUAL_REPORT',
+    });
+    results.push({
+      recipient: r,
+      status: log.status,
+      logId: log.id,
+      error: log.error,
+    });
+  }
+
+  const sentCount = results.filter((r) => r.status === 'SENT' || r.status === 'SIMULATED').length;
+  const failedCount = results.filter((r) => r.status === 'FAILED').length;
+  const firstError = results.find((r) => r.error)?.error || null;
+
+  return {
+    success: sentCount > 0,
+    sentCount,
+    failedCount,
+    recipients: recipientList,
+    results,
+    report,
+    error: sentCount === 0 && firstError ? firstError : undefined,
+  };
+}
+
+/**
+ * Background worker to check and dispatch scheduled reports (Daily, Weekly, Monthly)
+ * without duplicate scheduled emails.
+ */
+export async function processScheduledEmailDispatch(): Promise<{ dispatched: boolean; type?: string; reason?: string }> {
+  const settings = await prisma.emailScheduleSetting.findUnique({
+    where: { id: 'default-email-setting' },
+  });
+
+  if (!settings || !settings.enabled) {
+    return { dispatched: false, reason: 'Email settings disabled' };
+  }
+
+  const tz = settings.timezone || 'Asia/Kolkata';
+  const now = new Date();
+  const scheduleType = (settings.scheduleType || 'DAILY').toUpperCase();
+  const scheduleTime = settings.scheduleTime || settings.dailyTime || '18:00';
+
+  const [targetH, targetM] = scheduleTime.split(':').map(Number);
+  const currentZonedTime = toZonedTime(now, tz);
+  const curH = currentZonedTime.getHours();
+  const curM = currentZonedTime.getMinutes();
+
+  // Check if current time is within 15 min window of scheduleTime
+  const curTotalMin = curH * 60 + curM;
+  const targetTotalMin = targetH * 60 + targetM;
+  if (Math.abs(curTotalMin - targetTotalMin) > 15) {
+    return { dispatched: false, reason: 'Not schedule time' };
+  }
+
+  const dateStr = formatInTimeZone(now, tz, 'yyyy-MM-dd');
+  const dayOfWeek = formatInTimeZone(now, tz, 'EEE').toUpperCase();
+  const dayOfMonth = currentZonedTime.getDate();
+
+  if (scheduleType === 'DAILY') {
+    const key = `DAILY_${dateStr}`;
+    if (settings.lastSentKey === key) {
+      return { dispatched: false, reason: 'Already sent today' };
+    }
+    await prisma.emailScheduleSetting.update({
+      where: { id: settings.id },
+      data: { lastSentKey: key },
+    });
+    await sendEodReportEmail();
+    return { dispatched: true, type: 'DAILY' };
+  } else if (scheduleType === 'WEEKLY') {
+    const targetWeeklyDay = (settings.weeklyDay || 'FRI').toUpperCase();
+    if (dayOfWeek !== targetWeeklyDay) {
+      return { dispatched: false, reason: `Today is ${dayOfWeek}, weekly schedule is ${targetWeeklyDay}` };
+    }
+    const weekKey = `WEEKLY_${formatInTimeZone(now, tz, 'yyyy-ww')}`;
+    if (settings.lastSentKey === weekKey) {
+      return { dispatched: false, reason: 'Already sent this week' };
+    }
+    await prisma.emailScheduleSetting.update({
+      where: { id: settings.id },
+      data: { lastSentKey: weekKey },
+    });
+    await sendWeeklySummaryEmail();
+    return { dispatched: true, type: 'WEEKLY' };
+  } else if (scheduleType === 'MONTHLY') {
+    const targetMonthlyDay = settings.monthlyDay || 1;
+    if (dayOfMonth !== targetMonthlyDay) {
+      return { dispatched: false, reason: `Today is day ${dayOfMonth}, monthly schedule is day ${targetMonthlyDay}` };
+    }
+    const monthKey = `MONTHLY_${formatInTimeZone(now, tz, 'yyyy-MM')}`;
+    if (settings.lastSentKey === monthKey) {
+      return { dispatched: false, reason: 'Already sent this month' };
+    }
+    await prisma.emailScheduleSetting.update({
+      where: { id: settings.id },
+      data: { lastSentKey: monthKey },
+    });
+    await sendMonthlySummaryEmail();
+    return { dispatched: true, type: 'MONTHLY' };
+  }
+
+  return { dispatched: false };
+}
+

@@ -1,6 +1,6 @@
 import { prisma } from './prisma';
 import * as XLSX from 'xlsx';
-import { format, startOfWeek, endOfWeek, startOfDay, endOfDay, differenceInDays } from 'date-fns';
+import { format, startOfWeek, endOfWeek, startOfDay, endOfDay, differenceInDays, addDays } from 'date-fns';
 
 export interface ReportFilterOptions {
   startDate?: string | Date;
@@ -210,10 +210,80 @@ export async function getWeeklyReport({
     })),
   }));
 
+  // Build daily breakdown for the 7 days of the current week (Monday to Sunday)
+  const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const fullDaysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  const dailyBreakdownMap = new Map<string, {
+    date: string;
+    day: string;
+    fullDay: string;
+    formattedDate: string;
+    insideHours: number;
+    outsideHours: number;
+    totalHours: number;
+    insideSeconds: number;
+    outsideSeconds: number;
+    totalSeconds: number;
+  }>();
+
+  for (let i = 0; i < 7; i++) {
+    const dayDate = addDays(weekStart, i);
+    const dateKey = format(dayDate, 'yyyy-MM-dd');
+    dailyBreakdownMap.set(dateKey, {
+      date: dateKey,
+      day: daysOfWeek[i],
+      fullDay: fullDaysOfWeek[i],
+      formattedDate: format(dayDate, 'MMM dd'),
+      insideHours: 0,
+      outsideHours: 0,
+      totalHours: 0,
+      insideSeconds: 0,
+      outsideSeconds: 0,
+      totalSeconds: 0,
+    });
+  }
+
+  let weekInsideSeconds = 0;
+  let weekOutsideSeconds = 0;
+
+  for (const entry of entries) {
+    const dateKey = format(entry.startTime, 'yyyy-MM-dd');
+    const dayItem = dailyBreakdownMap.get(dateKey);
+    const dur = entry.duration;
+
+    if (entry.isOutsideHours) {
+      weekOutsideSeconds += dur;
+      if (dayItem) {
+        dayItem.outsideSeconds += dur;
+      }
+    } else {
+      weekInsideSeconds += dur;
+      if (dayItem) {
+        dayItem.insideSeconds += dur;
+      }
+    }
+    if (dayItem) {
+      dayItem.totalSeconds += dur;
+    }
+  }
+
+  const dailyBreakdown = Array.from(dailyBreakdownMap.values()).map((d) => ({
+    ...d,
+    insideHours: Number((d.insideSeconds / 3600).toFixed(2)),
+    outsideHours: Number((d.outsideSeconds / 3600).toFixed(2)),
+    totalHours: Number((d.totalSeconds / 3600).toFixed(2)),
+  }));
+
   return {
     weekStart: format(weekStart, 'yyyy-MM-dd'),
     weekEnd: format(weekEnd, 'yyyy-MM-dd'),
     totalTrackedSeconds: totalDuration,
+    weekInsideSeconds,
+    weekOutsideSeconds,
+    weekInsideHours: Number((weekInsideSeconds / 3600).toFixed(2)),
+    weekOutsideHours: Number((weekOutsideSeconds / 3600).toFixed(2)),
+    dailyBreakdown,
     totalEntriesCount: entries.length,
     projectBreakdown,
     highestProjectTime,
@@ -253,6 +323,7 @@ export async function getCustomReport(filters: ReportFilterOptions) {
   let outsideHoursDuration = 0;
 
   const dailyBreakdown = new Map<string, { date: string; duration: number; regular: number; outside: number }>();
+  const projectMap = new Map<string, { code: string; name: string; totalSeconds: number }>();
 
   for (const entry of entries) {
     const dur = entry.duration;
@@ -268,16 +339,45 @@ export async function getCustomReport(filters: ReportFilterOptions) {
     dRecord.duration += dur;
     if (entry.isOutsideHours) dRecord.outside += dur;
     else dRecord.regular += dur;
+
+    if (!projectMap.has(entry.projectId)) {
+      projectMap.set(entry.projectId, {
+        code: entry.project?.code || 'PRJ',
+        name: entry.project?.name || 'Project',
+        totalSeconds: 0,
+      });
+    }
+    projectMap.get(entry.projectId)!.totalSeconds += dur;
   }
+
+  const projectBreakdown = Array.from(projectMap.values()).map((p) => ({
+    project: { code: p.code, name: p.name },
+    code: p.code,
+    name: p.name,
+    duration: p.totalSeconds,
+    totalSeconds: p.totalSeconds,
+    hoursFormatted: formatDurationHours(p.totalSeconds),
+  }));
+
+  const dailyTimeline = Array.from(dailyBreakdown.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const dailyBreakdownList = dailyTimeline.map((d) => ({
+    date: d.date,
+    seconds: d.duration,
+    hoursFormatted: formatDurationHours(d.duration),
+  }));
 
   return {
     startDate: format(start, 'yyyy-MM-dd'),
     endDate: format(end, 'yyyy-MM-dd'),
     totalSeconds: totalDuration,
+    totalTrackedSeconds: totalDuration,
     regularSeconds: regularDuration,
     outsideHoursSeconds: outsideHoursDuration,
     entriesCount: entries.length,
-    dailyTimeline: Array.from(dailyBreakdown.values()).sort((a, b) => a.date.localeCompare(b.date)),
+    totalEntriesCount: entries.length,
+    dailyTimeline,
+    dailyBreakdown: dailyBreakdownList,
+    projectBreakdown,
     entries,
   };
 }

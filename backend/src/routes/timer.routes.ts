@@ -31,11 +31,18 @@ router.get('/active', authenticate, async (req: AuthRequest, res: Response) => {
 
 router.post('/start', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { projectId, notes, targetDurationMinutes } = req.body;
+    let { projectId, notes, targetDurationMinutes } = req.body;
 
     if (!projectId) {
-      res.status(400).json({ error: 'Project ID is required' });
-      return;
+      const defaultProject = await prisma.project.findFirst({
+        where: { status: 'ACTIVE' },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!defaultProject) {
+        res.status(400).json({ error: 'No active project available to track time.' });
+        return;
+      }
+      projectId = defaultProject.id;
     }
 
     const { activeEntry, previousStopped } = await startProjectTimer({

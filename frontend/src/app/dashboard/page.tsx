@@ -22,6 +22,8 @@ import {
   BarChart3,
   Moon,
   PieChart as PieIcon,
+  ExternalLink,
+  X,
 } from 'lucide-react';
 import { OutsideHoursDurationModal } from '@/components/OutsideHoursDurationModal';
 import {
@@ -35,6 +37,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  CartesianGrid,
 } from 'recharts';
 
 interface ProjectOption {
@@ -51,6 +54,8 @@ interface AdminDashboardData {
     todayHours: number;
     weekHours: number;
     monthHours: number;
+    monthInsideHours?: number;
+    monthOutsideHours?: number;
     activeTimersCount: number;
     pendingCorrections: number;
     outsideHoursReview: number;
@@ -62,27 +67,85 @@ interface AdminDashboardData {
     project: { id: string; code: string; name: string };
   }>;
   charts: {
-    topProjectsPieChart: Array<{ id: string; code: string; name: string; label: string; hours: number; seconds: number }>;
+    monthTimingPieChart?: Array<{ name: string; label: string; hours: number; seconds: number; color: string; percent?: number }>;
+    topProjectsPieChart?: Array<{ id: string; code: string; name: string; label: string; hours: number; seconds: number }>;
     dailyTrendChart: Array<{ date: string; regularHours: number; outsideHours: number; totalHours: number }>;
     projectDistributionChart: Array<{ name: string; hours: number }>;
     topEmployeesPieChart?: Array<{ name: string; hours: number; employeeId: string }>;
   };
 }
 
+export interface WeeklyDayTiming {
+  date: string;
+  day: string;
+  fullDay: string;
+  formattedDate: string;
+  insideHours: number;
+  outsideHours: number;
+  totalHours: number;
+  insideSeconds: number;
+  outsideSeconds: number;
+  totalSeconds: number;
+  isToday: boolean;
+}
+
 interface EmployeeDashboardData {
   todayTotalSeconds: number;
+  todayRegularSeconds: number;
+  todayOutsideHoursSeconds: number;
   weekTotalSeconds: number;
+  weekInsideSeconds: number;
+  weekOutsideSeconds: number;
+  weeklyTimingChart: WeeklyDayTiming[];
+  weekRangeText: string;
   todayProjects: Array<{ project: { code: string; name: string }; duration: number }>;
-  recentLogs: Array<{
-    id: string;
-    startTime: string;
-    endTime: string | null;
-    duration: number;
-    status: string;
-    isOutsideHours: boolean;
-    project: { code: string; name: string };
-  }>;
   pendingCorrectionsCount: number;
+}
+
+function getLogHoursBreakdown(
+  log: { startTime: string; endTime?: string | null; duration: number; isOutsideHours: boolean },
+  schedule?: { openingTime?: string; closingTime?: string } | null
+): { insideSeconds: number; outsideSeconds: number } {
+  if (!log.duration || log.duration <= 0) {
+    return { insideSeconds: 0, outsideSeconds: 0 };
+  }
+
+  // Explicit outside-hours sessions
+  if (log.isOutsideHours) {
+    return { insideSeconds: 0, outsideSeconds: log.duration };
+  }
+
+  // If schedule closing time is defined, check if session extended past closing
+  if (schedule?.closingTime) {
+    try {
+      const start = new Date(log.startTime);
+      const end = log.endTime ? new Date(log.endTime) : new Date(start.getTime() + log.duration * 1000);
+      const [closeH, closeM] = schedule.closingTime.split(':').map(Number);
+
+      const closingDate = new Date(start);
+      closingDate.setHours(closeH, closeM, 0, 0);
+
+      // Session finished before closing time
+      if (end.getTime() <= closingDate.getTime()) {
+        return { insideSeconds: log.duration, outsideSeconds: 0 };
+      }
+
+      // Session started after closing time
+      if (start.getTime() >= closingDate.getTime()) {
+        return { insideSeconds: 0, outsideSeconds: log.duration };
+      }
+
+      // Session spans across closing time
+      const insideMs = Math.max(0, closingDate.getTime() - start.getTime());
+      const insideSec = Math.min(log.duration, Math.round(insideMs / 1000));
+      const outsideSec = Math.max(0, log.duration - insideSec);
+      return { insideSeconds: insideSec, outsideSeconds: outsideSec };
+    } catch {
+      // Fallback to isOutsideHours flag on calculation error
+    }
+  }
+
+  return { insideSeconds: log.duration, outsideSeconds: 0 };
 }
 
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -104,7 +167,7 @@ export default function DashboardPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [timerNotes, setTimerNotes] = useState<string>('');
   const [isDurationModalOpen, setIsDurationModalOpen] = useState(false);
-
+  const [isAllTrackingModalOpen, setIsAllTrackingModalOpen] = useState(false);
   // Admin Data State
   const [adminData, setAdminData] = useState<AdminDashboardData | null>(null);
 
@@ -173,11 +236,10 @@ export default function DashboardPage() {
         }
       } else {
         // Parallelize all employee queries concurrently
-        const [prjRes, dailyRes, weeklyRes, logsRes, corrRes] = await Promise.all([
+        const [prjRes, dailyRes, weeklyRes, corrRes] = await Promise.all([
           fetch('/api/projects?status=ACTIVE'),
           fetch('/api/reports/daily'),
           fetch('/api/reports/weekly'),
-          fetch('/api/time-entries?limit=5'),
           fetch('/api/corrections?status=PENDING'),
         ]);
 
@@ -192,7 +254,6 @@ export default function DashboardPage() {
 
         const dailyData = dailyRes.ok ? await dailyRes.json() : null;
         const weeklyData = weeklyRes.ok ? await weeklyRes.json() : null;
-        const logsData = logsRes.ok ? await logsRes.json() : null;
         const corrData = corrRes.ok ? await corrRes.json() : null;
 
         // Group today's projects
@@ -206,11 +267,89 @@ export default function DashboardPage() {
           }
         }
 
+        // Build weekly timing chart data
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const todayDateStr = `${year}-${month}-${day}`;
+
+        let weeklyTimingChart: WeeklyDayTiming[] = [];
+        let weekInsideSeconds = weeklyData?.report?.weekInsideSeconds || 0;
+        let weekOutsideSeconds = weeklyData?.report?.weekOutsideSeconds || 0;
+
+        if (weeklyData?.report?.dailyBreakdown && weeklyData.report.dailyBreakdown.length > 0) {
+          weeklyTimingChart = weeklyData.report.dailyBreakdown.map((d: any) => ({
+            ...d,
+            isToday: d.date === todayDateStr,
+          }));
+        } else {
+          const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+          const fullDaysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+          const currentDay = now.getDay();
+          const mondayDiff = currentDay === 0 ? -6 : 1 - currentDay;
+          const monday = new Date(now);
+          monday.setDate(now.getDate() + mondayDiff);
+          monday.setHours(0, 0, 0, 0);
+
+          const dayMap = new Map<string, WeeklyDayTiming>();
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + i);
+            const dYear = d.getFullYear();
+            const dMonth = String(d.getMonth() + 1).padStart(2, '0');
+            const dDay = String(d.getDate()).padStart(2, '0');
+            const key = `${dYear}-${dMonth}-${dDay}`;
+            dayMap.set(key, {
+              date: key,
+              day: daysOfWeek[i],
+              fullDay: fullDaysOfWeek[i],
+              formattedDate: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+              insideHours: 0,
+              outsideHours: 0,
+              totalHours: 0,
+              insideSeconds: 0,
+              outsideSeconds: 0,
+              totalSeconds: 0,
+              isToday: key === todayDateStr,
+            });
+          }
+
+          if (weeklyData?.report?.rawEntries) {
+            for (const entry of weeklyData.report.rawEntries) {
+              const entryDate = entry.startTime.split('T')[0];
+              const dayItem = dayMap.get(entryDate);
+              if (dayItem) {
+                const breakdown = getLogHoursBreakdown(entry, schedule);
+                dayItem.insideSeconds += breakdown.insideSeconds;
+                dayItem.outsideSeconds += breakdown.outsideSeconds;
+                dayItem.totalSeconds += entry.duration;
+                dayItem.insideHours = Number((dayItem.insideSeconds / 3600).toFixed(2));
+                dayItem.outsideHours = Number((dayItem.outsideSeconds / 3600).toFixed(2));
+                dayItem.totalHours = Number((dayItem.totalSeconds / 3600).toFixed(2));
+              }
+            }
+          }
+
+          weeklyTimingChart = Array.from(dayMap.values());
+          weekInsideSeconds = weeklyTimingChart.reduce((acc, curr) => acc + curr.insideSeconds, 0);
+          weekOutsideSeconds = weeklyTimingChart.reduce((acc, curr) => acc + curr.outsideSeconds, 0);
+        }
+
+        const weekRangeText = weeklyData?.report?.weekStart && weeklyData?.report?.weekEnd
+          ? `${new Date(weeklyData.report.weekStart + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(weeklyData.report.weekEnd + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+          : 'Current Week';
+
         setEmpData({
           todayTotalSeconds: dailyData?.report?.totalTrackedSeconds || 0,
-          weekTotalSeconds: weeklyData?.report?.totalTrackedSeconds || 0,
+          todayRegularSeconds: dailyData?.report?.regularSeconds || 0,
+          todayOutsideHoursSeconds: dailyData?.report?.outsideHoursSeconds || 0,
+          weekTotalSeconds: weeklyData?.report?.totalTrackedSeconds || (weekInsideSeconds + weekOutsideSeconds),
+          weekInsideSeconds,
+          weekOutsideSeconds,
+          weeklyTimingChart,
+          weekRangeText,
           todayProjects: Array.from(todayProjectsMap.values()),
-          recentLogs: logsData?.entries || [],
           pendingCorrectionsCount: corrData?.requests?.length || 0,
         });
       }
@@ -222,7 +361,7 @@ export default function DashboardPage() {
   };
 
   const handleStartTimer = async () => {
-    if (!selectedProjectId) return;
+    const targetProject = selectedProjectId || (projects.length > 0 ? projects[0].id : '');
 
     // Require duration limit selection if starting outside office hours
     if (isOutsideHours) {
@@ -237,7 +376,7 @@ export default function DashboardPage() {
       }
     }
 
-    const ok = await startTimer(selectedProjectId, timerNotes);
+    const ok = await startTimer(targetProject);
     if (ok) {
       setTimerNotes('');
       loadDashboardData();
@@ -245,14 +384,14 @@ export default function DashboardPage() {
       // Immediately take live milestone 0 screenshot of workstation
       const currentActive = useTimerStore.getState().activeTimer;
       if (currentActive && user && isScreenStreamActive()) {
-        const intervalMinutes = Math.max(1, screenshotSetting?.intervalMinutes || 10);
+        const intervalMinutes = Math.max(1, screenshotSetting?.intervalMinutes || 60);
         captureAndUploadActivityScreenshot({
           userId: user.id,
           userName: user.name,
           employeeId: user.employeeId,
           timeEntryId: currentActive.id,
-          projectCode: currentActive.project.code,
-          projectName: currentActive.project.name,
+          projectCode: currentActive.project?.code || 'PRJ',
+          projectName: currentActive.project?.name || 'Workspace',
           elapsedSeconds: 0,
           intervalMinutes,
           intervalIndex: 0,
@@ -261,8 +400,8 @@ export default function DashboardPage() {
     }
   };
 
-  const handleConfirmOutsideStart = async (durationMinutes: number, notes?: string) => {
-    if (!selectedProjectId) return;
+  const handleConfirmOutsideStart = async (durationMinutes: number) => {
+    const targetProject = selectedProjectId || (projects.length > 0 ? projects[0].id : '');
 
     if (screenshotSetting?.enabled && !isScreenStreamActive()) {
       const stream = await requestScreenStream();
@@ -271,7 +410,7 @@ export default function DashboardPage() {
       }
     }
 
-    const ok = await startTimer(selectedProjectId, notes || timerNotes, durationMinutes);
+    const ok = await startTimer(targetProject, undefined, durationMinutes);
     if (ok) {
       setIsDurationModalOpen(false);
       setTimerNotes('');
@@ -280,14 +419,14 @@ export default function DashboardPage() {
       // Immediately take live milestone 0 screenshot of workstation
       const currentActive = useTimerStore.getState().activeTimer;
       if (currentActive && user && isScreenStreamActive()) {
-        const intervalMinutes = Math.max(1, screenshotSetting?.intervalMinutes || 10);
+        const intervalMinutes = Math.max(1, screenshotSetting?.intervalMinutes || 60);
         captureAndUploadActivityScreenshot({
           userId: user.id,
           userName: user.name,
           employeeId: user.employeeId,
           timeEntryId: currentActive.id,
-          projectCode: currentActive.project.code,
-          projectName: currentActive.project.name,
+          projectCode: currentActive.project?.code || 'PRJ',
+          projectName: currentActive.project?.name || 'Workspace',
           elapsedSeconds: 0,
           intervalMinutes,
           intervalIndex: 0,
@@ -319,23 +458,6 @@ export default function DashboardPage() {
             <p className="text-sm text-slate-400 mt-0.5">
               {currentDateStr || 'Today'}
             </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/reports"
-              className="py-2 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-medium text-slate-200 flex items-center gap-1.5 transition"
-            >
-              <BarChart3 className="w-4 h-4 text-slate-400" /> View Analytics
-            </Link>
-            {isAdmin && (
-              <Link
-                href="/corrections"
-                className="py-2 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium flex items-center gap-1.5 shadow-md shadow-blue-600/20 transition"
-              >
-                Approvals ({adminData?.summary.pendingCorrections || 0})
-              </Link>
-            )}
           </div>
         </div>
 
@@ -409,7 +531,7 @@ export default function DashboardPage() {
                       </p>
                     ) : (
                       <p className="text-sm text-slate-400">
-                        Select a project to start logging time.
+                        Click Start Timer to begin tracking your work.
                       </p>
                     )}
                     <p className="text-xs text-slate-500 font-mono">
@@ -423,86 +545,35 @@ export default function DashboardPage() {
             {/* Controls */}
             <div className="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               {!activeTimer ? (
-                <>
-                  <div className="min-w-[220px]">
-                    <select
-                      id="timer-project-select"
-                      data-testid="timer-project-select"
-                      value={selectedProjectId}
-                      onChange={(e) => setSelectedProjectId(e.target.value)}
-                      className="w-full py-2.5 px-3 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500"
-                    >
-                      {projects.length === 0 ? (
-                        <option value="">No active projects available</option>
-                      ) : (
-                        projects.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.code} — {p.name}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </div>
-
-                  <input
-                    id="timer-notes-input"
-                    data-testid="timer-notes-input"
-                    type="text"
-                    placeholder="Task notes (optional)"
-                    value={timerNotes}
-                    onChange={(e) => setTimerNotes(e.target.value)}
-                    className="py-2.5 px-3 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 sm:w-56"
-                  />
-
-                  <button
-                    id="timer-start-btn"
-                    data-testid="timer-start-btn"
-                    onClick={handleStartTimer}
-                    disabled={isTimerLoading || projects.length === 0}
-                    className={`py-2.5 px-6 rounded-xl font-medium text-sm flex items-center justify-center gap-2 shadow-lg transition disabled:opacity-50 cursor-pointer ${
-                      isOutsideHours
-                        ? 'bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-white shadow-amber-950/40'
-                        : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30'
-                    }`}
-                  >
-                    {isOutsideHours ? (
-                      <>
-                        <Moon className="w-4 h-4 text-amber-200 fill-amber-200" /> Start Overtime Session
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-4 h-4 fill-white" /> Start Timer
-                      </>
-                    )}
-                  </button>
-                </>
+                <button
+                  id="timer-start-btn"
+                  data-testid="timer-start-btn"
+                  onClick={handleStartTimer}
+                  disabled={isTimerLoading}
+                  className={`py-3 px-8 rounded-xl font-medium text-sm flex items-center justify-center gap-2.5 shadow-lg transition disabled:opacity-50 cursor-pointer ${
+                    isOutsideHours
+                      ? 'bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-white shadow-amber-950/40'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30'
+                  }`}
+                >
+                  {isOutsideHours ? (
+                    <>
+                      <Moon className="w-4 h-4 text-amber-200 fill-amber-200" /> Start Overtime Session
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 fill-white" /> Start Timer
+                    </>
+                  )}
+                </button>
               ) : (
                 <div className="flex items-center gap-3">
-                  <div className="min-w-[200px]">
-                    <select
-                      id="timer-switch-select"
-                      data-testid="timer-switch-select"
-                      value={selectedProjectId}
-                      onChange={(e) => {
-                        setSelectedProjectId(e.target.value);
-                        startTimer(e.target.value);
-                      }}
-                      className="w-full py-2.5 px-3 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-blue-500"
-                    >
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          Switch to: {p.code}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
                   <button
                     id="timer-stop-btn"
                     data-testid="timer-stop-btn"
                     onClick={handleStopTimer}
                     disabled={isTimerLoading}
-                    className="py-2.5 px-6 rounded-xl bg-red-600 hover:bg-red-500 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition cursor-pointer"
+                    className="py-3 px-8 rounded-xl bg-red-600 hover:bg-red-500 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition cursor-pointer"
                   >
                     <Square className="w-4 h-4 fill-white" /> Stop Timer
                   </button>
@@ -557,13 +628,13 @@ export default function DashboardPage() {
 
               <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
                 <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-                  <span>Pending Corrections</span>
-                  <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                  <span>Total Employees</span>
+                  <Users className="w-4 h-4 text-purple-400" />
                 </div>
                 <div className="mt-2 text-2xl font-bold text-white">
-                  {adminData.summary.pendingCorrections}
+                  {adminData.summary.totalEmployees}
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">Awaiting approval</p>
+                <p className="text-[11px] text-slate-500 mt-1">Total registered workforce</p>
               </div>
             </div>
 
@@ -571,34 +642,51 @@ export default function DashboardPage() {
             {adminData.runningEmployees.length > 0 && (
               <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    Employees Currently Tracking Time
-                  </h3>
-                  <span className="text-xs text-slate-400">
-                    {adminData.runningEmployees.length} active
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <h3 className="text-base font-semibold text-white">
+                      Employees Currently Tracking Time
+                    </h3>
+                    <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
+                      {adminData.runningEmployees.length} active
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    id="view-all-tracking-employees-btn"
+                    data-testid="view-all-tracking-employees-btn"
+                    onClick={() => setIsAllTrackingModalOpen(true)}
+                    className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 cursor-pointer"
+                  >
+                    <span>View All ({adminData.runningEmployees.length})</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {adminData.runningEmployees.map((t) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {adminData.runningEmployees.slice(0, 4).map((t) => (
                     <div
                       key={t.entryId}
-                      className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between"
+                      className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition"
                     >
-                      <div>
-                        <p className="text-sm font-semibold text-white">{t.user.name}</p>
-                        <p className="text-xs text-slate-400 font-mono">{t.user.employeeId}</p>
-                        <p className="text-xs text-blue-400 font-medium mt-1 truncate max-w-[180px]">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{t.user.name}</p>
+                          <p className="text-xs text-slate-400 font-mono">{t.user.employeeId}</p>
+                        </div>
+                        <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 font-mono text-[11px] font-semibold rounded-md border border-emerald-500/30 shrink-0">
+                          Active
+                        </span>
+                      </div>
+                      <div className="pt-2 border-t border-slate-800/80">
+                        <p className="text-xs text-blue-400 font-medium truncate" title={`${t.project.code}: ${t.project.name}`}>
                           {t.project.code}: {t.project.name}
                         </p>
-                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">
                           Started: {new Date(t.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                         </p>
                       </div>
-                      <span className="px-2 py-1 bg-emerald-500/20 text-emerald-300 font-mono text-xs rounded-md border border-emerald-500/30">
-                        Active
-                      </span>
                     </div>
                   ))}
                 </div>
@@ -634,72 +722,148 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Top 5 Projects Pie Chart */}
+              {/* Current Month Work Timing Breakdown (Inside vs Outside) */}
               <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                      <FolderKanban className="w-4 h-4 text-blue-400" />
-                      Top 5 Projects
+                      <PieIcon className="w-4 h-4 text-blue-400" />
+                      Current Month Timing
                     </h3>
-                    <p className="text-xs text-slate-400">Total tracked hours this month</p>
+                    <p className="text-xs text-slate-400">
+                      Inside Timing vs Outside Timing ({new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})
+                    </p>
                   </div>
-                  <PieIcon className="w-5 h-5 text-slate-500" />
+                  <Clock className="w-5 h-5 text-slate-500" />
                 </div>
 
-                <div className="h-64 w-full flex items-center justify-center">
-                  {!adminData.charts.topProjectsPieChart || adminData.charts.topProjectsPieChart.length === 0 ? (
-                    <p className="text-xs text-slate-500">No tracked project hours this month yet.</p>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={adminData.charts.topProjectsPieChart}
-                          dataKey="hours"
-                          nameKey="code"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          label={({ code, percent }: { code?: string; percent?: number }) =>
-                            `${code || ''} ${((percent || 0) * 100).toFixed(0)}%`
-                          }
-                          labelLine={false}
-                        >
-                          {adminData.charts.topProjectsPieChart.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px' }}
-                          formatter={(value: any, name: any, item: any) => [
-                            `${value} hrs`,
-                            item?.payload?.name ? `${item.payload.code} (${item.payload.name})` : name,
-                          ]}
-                          itemStyle={{ fontSize: '12px' }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
+                {(() => {
+                  let pieData = adminData.charts.monthTimingPieChart;
+                  const totalMonthHours = adminData.summary.monthHours || 0;
 
-                {/* Top 5 Projects Legend List */}
-                {adminData.charts.topProjectsPieChart && adminData.charts.topProjectsPieChart.length > 0 && (
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2">
-                    {adminData.charts.topProjectsPieChart.map((proj, idx) => (
-                      <div key={proj.code || idx} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }}
-                          />
-                          <span className="font-semibold text-slate-200">{proj.code}</span>
-                          <span className="text-slate-400 truncate">{proj.name}</span>
-                        </div>
-                        <span className="font-mono font-medium text-slate-300 ml-2 shrink-0">{proj.hours} hrs</span>
+                  // Robust fallback if monthTimingPieChart wasn't populated
+                  if (!pieData || pieData.length === 0) {
+                    const insideH = adminData.summary.monthInsideHours ?? 0;
+                    const outsideH = adminData.summary.monthOutsideHours ?? (totalMonthHours > insideH ? Number((totalMonthHours - insideH).toFixed(2)) : 0);
+                    const totalH = insideH + outsideH || totalMonthHours;
+                    const insidePct = totalH > 0 ? Math.round((insideH / totalH) * 100) : 0;
+                    const outsidePct = totalH > 0 ? 100 - insidePct : 0;
+
+                    pieData = [
+                      {
+                        name: 'Inside Timing',
+                        label: 'Inside Office Hours',
+                        hours: insideH,
+                        seconds: Math.round(insideH * 3600),
+                        percent: insidePct,
+                        color: '#10b981',
+                      },
+                      {
+                        name: 'Outside Timing',
+                        label: 'Outside Hours (Overtime)',
+                        hours: outsideH,
+                        seconds: Math.round(outsideH * 3600),
+                        percent: outsidePct,
+                        color: '#f59e0b',
+                      },
+                    ];
+                  }
+
+                  const hasData = pieData.some((p) => (p.hours || 0) > 0 || (p.seconds || 0) > 0) || totalMonthHours > 0;
+                  const insideSlice = pieData.find((p) => p.name === 'Inside Timing') || pieData[0];
+                  const outsideSlice = pieData.find((p) => p.name === 'Outside Timing') || pieData[1];
+
+                  return (
+                    <div className="flex flex-col flex-1 justify-between">
+                      <div className="h-56 w-full relative flex items-center justify-center">
+                        {!hasData ? (
+                          <div className="text-center py-6 text-slate-500">
+                            <Clock className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                            <p className="text-xs">No hours tracked this month yet.</p>
+                          </div>
+                        ) : (
+                          <>
+                            <ResponsiveContainer width="100%" height={224}>
+                              <PieChart>
+                                <Pie
+                                  data={pieData}
+                                  dataKey="hours"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={55}
+                                  outerRadius={80}
+                                  paddingAngle={pieData.every((p) => (p.hours || 0) > 0) ? 2 : 0}
+                                  label={({ name, percent }: { name?: string; percent?: number }) =>
+                                    (percent || 0) >= 0.08 ? `${name === 'Inside Timing' ? 'Inside' : 'Outside'} ${((percent || 0) * 100).toFixed(0)}%` : ''
+                                  }
+                                  labelLine={false}
+                                >
+                                  {pieData.map((entry, index) => (
+                                    <Cell
+                                      key={`timing-cell-${index}`}
+                                      fill={entry.color || (index === 0 ? '#10b981' : '#f59e0b')}
+                                    />
+                                  ))}
+                                </Pie>
+                                <Tooltip
+                                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px' }}
+                                  formatter={(value: any, name: any, item: any) => [
+                                    `${value} hrs (${item?.payload?.percent ?? 0}%)`,
+                                    item?.payload?.label || name,
+                                  ]}
+                                  itemStyle={{ fontSize: '12px' }}
+                                />
+                              </PieChart>
+                            </ResponsiveContainer>
+                            {/* Center Donut Metric */}
+                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                              <span className="text-xl font-bold font-mono text-white tracking-tight">{totalMonthHours}h</span>
+                              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Total</span>
+                            </div>
+                          </>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
+
+                      {/* Month Timing Legend & Cards */}
+                      {hasData && (
+                        <div className="mt-4 pt-3 border-t border-slate-800/80 grid grid-cols-2 gap-2">
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span className="font-semibold text-slate-200">Inside Timing</span>
+                            </div>
+                            <div className="mt-1 flex items-baseline justify-between">
+                              <span className="font-mono text-base font-bold text-emerald-400">
+                                {insideSlice?.hours || 0} <span className="text-[10px] font-normal text-slate-400">hrs</span>
+                              </span>
+                              <span className="text-[11px] font-mono font-medium text-slate-400">
+                                {insideSlice?.percent ?? 0}%
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-0.5 truncate">Regular office schedule</p>
+                          </div>
+
+                          <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                              <span className="font-semibold text-slate-200">Outside Timing</span>
+                            </div>
+                            <div className="mt-1 flex items-baseline justify-between">
+                              <span className="font-mono text-base font-bold text-amber-400">
+                                {outsideSlice?.hours || 0} <span className="text-[10px] font-normal text-slate-400">hrs</span>
+                              </span>
+                              <span className="text-[11px] font-mono font-medium text-slate-400">
+                                {outsideSlice?.percent ?? 0}%
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-0.5 truncate">Overtime / after hours</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -711,13 +875,35 @@ export default function DashboardPage() {
         {!isAdmin && empData && (
           <div className="space-y-8">
             {/* Quick Metrics */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
                 <div className="text-slate-400 text-xs font-medium">Today's Tracked Time</div>
                 <div className="mt-2 text-2xl font-bold text-white font-mono">
                   {formatSecondsToTimer(empData.todayTotalSeconds)}
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">Logged across all projects today</p>
+                <p className="text-[11px] text-slate-500 mt-1">Total recorded today</p>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
+                <div className="text-slate-400 text-xs font-medium flex items-center justify-between">
+                  <span>Inside Hours (Today)</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div className="mt-2 text-2xl font-bold text-emerald-400 font-mono">
+                  {formatSecondsToTimer(empData.todayRegularSeconds || 0)}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">Regular office schedule</p>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
+                <div className="text-slate-400 text-xs font-medium flex items-center justify-between">
+                  <span>Outside Hours (Today)</span>
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                </div>
+                <div className="mt-2 text-2xl font-bold text-amber-400 font-mono">
+                  {formatSecondsToTimer(empData.todayOutsideHoursSeconds || 0)}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">Overtime / after hours</p>
               </div>
 
               <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
@@ -726,119 +912,225 @@ export default function DashboardPage() {
                   {(empData.weekTotalSeconds / 3600).toFixed(1)}{' '}
                   <span className="text-xs font-normal text-slate-400">hours</span>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">Monday to Sunday period</p>
-              </div>
-
-              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800">
-                <div className="text-slate-400 text-xs font-medium">Pending Corrections</div>
-                <div className="mt-2 text-2xl font-bold text-white">
-                  {empData.pendingCorrectionsCount}
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">Requests waiting admin review</p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {empData.pendingCorrectionsCount > 0
+                    ? `${empData.pendingCorrectionsCount} correction(s) pending`
+                    : 'Monday to Sunday period'}
+                </p>
               </div>
             </div>
 
-            {/* Today's Project-Wise Time Breakdown */}
-            <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
-              <h3 className="text-base font-semibold text-white mb-4">
-                Today's Project-Wise Distribution
-              </h3>
+            {/* Current Week Work Timing as a Graph */}
+            <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
 
-              {empData.todayProjects.length === 0 ? (
-                <div className="py-8 text-center text-slate-500 text-sm">
-                  No time tracked yet today. Start your timer above to begin recording hours!
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 relative z-10">
+                <div>
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-blue-400" />
+                    Current Week Work Timing
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Your daily work hours breakdown (Inside Office Hours &amp; Outside Hours) for {empData.weekRangeText}
+                  </p>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {empData.todayProjects.map((p, idx) => {
-                    const percent = empData.todayTotalSeconds > 0
-                      ? Math.round((p.duration / empData.todayTotalSeconds) * 100)
-                      : 0;
-                    return (
-                      <div key={idx} className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                        <div className="flex items-center justify-between text-sm mb-1.5">
-                          <span className="font-medium text-slate-200">
-                            <strong className="text-blue-400">{p.project.code}</strong> — {p.project.name}
-                          </span>
-                          <span className="font-mono text-slate-300 font-semibold">
-                            {formatSecondsToTimer(p.duration)} ({percent}%)
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                          <div
-                            className="bg-blue-500 h-2 rounded-full transition-all duration-500"
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
 
-            {/* Recent Time Logs Table */}
-            <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-white">Recent Time History</h3>
-                <Link
-                  href="/time-logs"
-                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 font-medium"
-                >
-                  View All Logs <ArrowUpRight className="w-3.5 h-3.5" />
-                </Link>
+                {/* Summary Stat Badges */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 flex items-center gap-2">
+                    <Clock className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Week Total:</span>
+                    <span className="font-mono font-bold text-white">
+                      {formatSecondsToTimer(empData.weekTotalSeconds)}
+                    </span>
+                  </div>
+
+                  <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span>Inside:</span>
+                    <span className="font-mono font-bold">
+                      {formatSecondsToTimer(empData.weekInsideSeconds)}
+                    </span>
+                  </div>
+
+                  <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span>Outside:</span>
+                    <span className="font-mono font-bold">
+                      {formatSecondsToTimer(empData.weekOutsideSeconds)}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {empData.recentLogs.length === 0 ? (
-                <div className="py-6 text-center text-slate-500 text-sm">
-                  No previous time logs found.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider">
-                        <th className="pb-3 font-medium">Project</th>
-                        <th className="pb-3 font-medium">Date & Time</th>
-                        <th className="pb-3 font-medium">Duration</th>
-                        <th className="pb-3 font-medium">Type</th>
-                        <th className="pb-3 font-medium">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60">
-                      {empData.recentLogs.map((log) => (
-                        <tr key={log.id} className="text-slate-300 hover:bg-slate-800/30 transition">
-                          <td className="py-3 font-medium text-white">
-                            {log.project.code} — {log.project.name}
-                          </td>
-                          <td className="py-3 text-xs text-slate-400">
-                            {new Date(log.startTime).toLocaleString()}
-                          </td>
-                          <td className="py-3 font-mono font-medium">
-                            {formatSecondsToTimer(log.duration)}
-                          </td>
-                          <td className="py-3">
-                            {log.isOutsideHours ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                Outside Hours
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                Regular
-                              </span>
+              {/* Weekly Timing Bar Chart */}
+              <div className="h-72 w-full relative z-10">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={empData.weeklyTimingChart}
+                    margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis
+                      dataKey="day"
+                      stroke="#64748b"
+                      fontSize={12}
+                      tickLine={false}
+                      tick={({ x, y, payload }: any) => {
+                        const item = empData.weeklyTimingChart.find((d) => d.day === payload.value);
+                        const isToday = item?.isToday;
+                        return (
+                          <g transform={`translate(${x},${y})`}>
+                            <text
+                              x={0}
+                              y={0}
+                              dy={14}
+                              textAnchor="middle"
+                              fill={isToday ? '#60a5fa' : '#94a3b8'}
+                              fontWeight={isToday ? '700' : '500'}
+                              fontSize={12}
+                            >
+                              {payload.value}
+                            </text>
+                            {isToday && (
+                              <circle cx={0} cy={22} r={2.5} fill="#60a5fa" />
                             )}
-                          </td>
-                          <td className="py-3">
-                            <span className="text-xs text-slate-400 uppercase font-mono">
-                              {log.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                          </g>
+                        );
+                      }}
+                    />
+                    <YAxis
+                      stroke="#64748b"
+                      fontSize={11}
+                      unit="h"
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(51, 65, 85, 0.2)' }}
+                      content={({ active, payload }: any) => {
+                        if (active && payload && payload.length) {
+                          const data: WeeklyDayTiming = payload[0].payload;
+                          return (
+                            <div className="bg-slate-950 border border-slate-700/80 rounded-xl p-3 shadow-2xl text-xs space-y-2 min-w-[210px]">
+                              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                                <span className="font-semibold text-white flex items-center gap-1.5">
+                                  {data.fullDay}
+                                  {data.isToday && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                      Today
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="text-slate-400 font-mono text-[11px]">{data.formattedDate}</span>
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-emerald-400">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                                    Inside Hours:
+                                  </span>
+                                  <span className="font-mono font-semibold">
+                                    {formatSecondsToTimer(data.insideSeconds)} ({data.insideHours}h)
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-amber-400">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                                    Outside Hours:
+                                  </span>
+                                  <span className="font-mono font-semibold">
+                                    {formatSecondsToTimer(data.outsideSeconds)} ({data.outsideHours}h)
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/80 text-white font-medium">
+                                  <span>Total Timing:</span>
+                                  <span className="font-mono font-bold text-blue-400">
+                                    {formatSecondsToTimer(data.totalSeconds)} ({data.totalHours}h)
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Legend
+                      wrapperStyle={{ fontSize: '12px', paddingTop: '16px' }}
+                      formatter={(val) => <span className="text-slate-300 font-medium">{val}</span>}
+                    />
+                    <Bar
+                      dataKey="insideHours"
+                      name="Inside Hours (Regular)"
+                      fill="#10b981"
+                      stackId="timing"
+                      radius={[0, 0, 0, 0]}
+                      maxBarSize={44}
+                    />
+                    <Bar
+                      dataKey="outsideHours"
+                      name="Outside Hours (Overtime)"
+                      fill="#f59e0b"
+                      stackId="timing"
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={44}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* 7-Day Quick Glance Cards Strip */}
+              <div className="mt-6 pt-5 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5 relative z-10">
+                {empData.weeklyTimingChart.map((d) => (
+                  <div
+                    key={d.date}
+                    className={`p-3 rounded-xl border transition flex flex-col justify-between ${
+                      d.isToday
+                        ? 'bg-blue-950/30 border-blue-500/40 shadow-sm shadow-blue-500/10'
+                        : d.totalSeconds > 0
+                        ? 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700'
+                        : 'bg-slate-950/30 border-slate-800/40 opacity-70'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-semibold ${d.isToday ? 'text-blue-400' : 'text-slate-300'}`}>
+                        {d.day}
+                      </span>
+                      {d.isToday ? (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-300 uppercase tracking-wider">
+                          Today
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 font-mono">{d.formattedDate}</span>
+                      )}
+                    </div>
+
+                    <div className="mt-2.5">
+                      <div className="text-base font-bold font-mono text-white">
+                        {d.totalSeconds > 0 ? formatSecondsToTimer(d.totalSeconds) : '00:00:00'}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5 text-[10px] font-mono">
+                        {d.insideSeconds > 0 && (
+                          <span className="text-emerald-400 flex items-center gap-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            {d.insideHours}h
+                          </span>
+                        )}
+                        {d.outsideSeconds > 0 && (
+                          <span className="text-amber-400 flex items-center gap-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            {d.outsideHours}h
+                          </span>
+                        )}
+                        {d.totalSeconds === 0 && (
+                          <span className="text-slate-500">No logs</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -855,6 +1147,103 @@ export default function DashboardPage() {
         initialNotes={timerNotes}
         isStarting={isTimerLoading}
       />
+
+      {/* View All Active Tracking Employees Modal */}
+      {isAllTrackingModalOpen && adminData && (
+        <div
+          id="active-tracking-employees-modal"
+          data-testid="active-tracking-employees-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setIsAllTrackingModalOpen(false)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl shadow-black/80 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <Clock className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-white">Employees Currently Tracking Time</h3>
+                    <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      {adminData.runningEmployees.length} Online
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Live overview of all active project time tracking sessions across the organization.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="close-tracking-modal-btn"
+                data-testid="close-tracking-modal-btn"
+                onClick={() => setIsAllTrackingModalOpen(false)}
+                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body: Neat Grid View */}
+            <div className="p-6 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {adminData.runningEmployees.map((t) => (
+                  <div
+                    key={t.entryId}
+                    className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-slate-700/80 transition flex flex-col justify-between gap-3 shadow-md"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-blue-600/15 border border-blue-500/30 text-blue-400 flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                          {t.user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-white truncate">{t.user.name}</p>
+                          <p className="text-xs text-slate-400 font-mono">{t.user.employeeId}</p>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 font-mono text-[11px] font-semibold rounded-md border border-emerald-500/30 shrink-0 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        Active
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80 space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs text-blue-400 font-medium truncate">
+                        <FolderKanban className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{t.project.code}: {t.project.name}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1 border-t border-slate-800/60">
+                        <span>Started:</span>
+                        <span className="text-slate-300">
+                          {new Date(t.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between text-xs text-slate-400 shrink-0">
+              <span>Showing all {adminData.runningEmployees.length} currently running employee timers</span>
+              <button
+                type="button"
+                onClick={() => setIsAllTrackingModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

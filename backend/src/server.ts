@@ -15,6 +15,8 @@ import dashboardRoutes from './routes/dashboard.routes';
 import reportsRoutes from './routes/reports.routes';
 import settingsRoutes from './routes/settings.routes';
 import screenshotsRoutes from './routes/screenshots.routes';
+import mailRoutes from './routes/mail.routes';
+import officeTimingsRoutes from './routes/officeTimings.routes';
 import { initBackgroundScheduler } from './lib/cronScheduler';
 
 const app = express();
@@ -63,6 +65,8 @@ app.use('/api/admin/dashboard', dashboardRoutes);
 app.use('/api/admin', settingsRoutes); // for /api/admin/audit-logs
 app.use('/api/reports', reportsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/mail', mailRoutes);
+app.use('/api/office-timings', officeTimingsRoutes);
 app.use('/api/screenshots', screenshotsRoutes);
 
 // Health check endpoint

@@ -89,7 +89,7 @@ interface TimerState {
   isLoading: boolean;
   error: string | null;
   syncActiveTimer: () => Promise<void>;
-  startTimer: (projectId: string, notes?: string, targetDurationMinutes?: number) => Promise<boolean>;
+  startTimer: (projectId?: string, notes?: string, targetDurationMinutes?: number) => Promise<boolean>;
   stopTimer: (notes?: string) => Promise<boolean>;
   tick: () => void;
 }
@@ -139,7 +139,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     }
   },
 
-  startTimer: async (projectId: string, notes?: string, targetDurationMinutes?: number) => {
+  startTimer: async (projectId?: string, notes?: string, targetDurationMinutes?: number) => {
     set({ isLoading: true, error: null });
     try {
       const res = await fetch('/api/timer/start', {

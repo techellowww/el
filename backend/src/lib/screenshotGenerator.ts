@@ -237,3 +237,33 @@ export async function processAutomatedScreenshotsForRunningTimers(): Promise<{ p
     return { processedTimers: 0, createdScreenshots: 0 };
   }
 }
+
+/**
+ * Automatically cleans up screenshots older than the configured retention period (default 30 days / 1 month).
+ */
+export async function cleanupOldScreenshots(): Promise<{ deletedCount: number; cutoffDate: Date; retentionDays: number }> {
+  try {
+    const settings = await prisma.screenshotSetting.findUnique({
+      where: { id: 'default-screenshot-setting' },
+    });
+
+    const retentionDays = settings?.retentionDays ?? 30; // default 1 month (30 days)
+    const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+
+    const result = await prisma.screenshotRecord.deleteMany({
+      where: {
+        capturedAt: { lt: cutoffDate },
+      },
+    });
+
+    if (result.count > 0) {
+      console.log(`🧹 [Screenshot Retention] Automatically deleted ${result.count} screenshots older than ${retentionDays} days (${cutoffDate.toISOString()}).`);
+    }
+
+    return { deletedCount: result.count, cutoffDate, retentionDays };
+  } catch (error) {
+    console.error('Error during automatic screenshot cleanup:', error);
+    return { deletedCount: 0, cutoffDate: new Date(), retentionDays: 30 };
+  }
+}
+

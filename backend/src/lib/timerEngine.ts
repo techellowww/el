@@ -2,6 +2,22 @@ import { prisma } from './prisma';
 import { logAuditEvent } from './audit';
 import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
 
+export interface DayTiming {
+  start: string;
+  end: string;
+}
+
+export interface DayTimingsMap {
+  MON: DayTiming;
+  TUE: DayTiming;
+  WED: DayTiming;
+  THU: DayTiming;
+  FRI: DayTiming;
+  SAT: DayTiming;
+  SUN: DayTiming;
+  [day: string]: DayTiming;
+}
+
 export interface OfficeScheduleConfig {
   openingTime: string; // "09:00"
   closingTime: string; // "18:00"
@@ -9,16 +25,57 @@ export interface OfficeScheduleConfig {
   timezone: string;    // "Asia/Kolkata"
   allowOutsideHours: boolean;
   autoCutoffEnabled: boolean;
+  dayTimings?: string | DayTimingsMap | null;
 }
+
+export const DEFAULT_DAY_TIMINGS: DayTimingsMap = {
+  MON: { start: '09:00', end: '18:00' },
+  TUE: { start: '09:00', end: '18:00' },
+  WED: { start: '09:00', end: '18:00' },
+  THU: { start: '09:00', end: '18:00' },
+  FRI: { start: '09:00', end: '18:00' },
+  SAT: { start: '09:00', end: '18:00' },
+  SUN: { start: '09:00', end: '18:00' },
+};
 
 const DEFAULT_SCHEDULE: OfficeScheduleConfig = {
   openingTime: '09:00',
   closingTime: '18:00',
-  workingDays: 'MON,TUE,WED,THU,FRI',
+  workingDays: 'MON,TUE,WED,THU,FRI,SAT,SUN',
   timezone: 'Asia/Kolkata',
   allowOutsideHours: true,
   autoCutoffEnabled: true,
+  dayTimings: JSON.stringify(DEFAULT_DAY_TIMINGS),
 };
+
+export function parseDayTimings(raw?: string | DayTimingsMap | null): DayTimingsMap {
+  if (!raw) return DEFAULT_DAY_TIMINGS;
+  if (typeof raw === 'object') return { ...DEFAULT_DAY_TIMINGS, ...raw };
+  try {
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_DAY_TIMINGS, ...parsed };
+  } catch {
+    return DEFAULT_DAY_TIMINGS;
+  }
+}
+
+export function getOpeningTimeForDate(date: Date, schedule: OfficeScheduleConfig): string {
+  const dayTimings = parseDayTimings(schedule.dayTimings);
+  const dayOfWeek = formatInTimeZone(date, schedule.timezone, 'EEE').toUpperCase();
+  if (dayTimings[dayOfWeek]?.start) {
+    return dayTimings[dayOfWeek].start;
+  }
+  return schedule.openingTime || '09:00';
+}
+
+export function getClosingTimeForDate(date: Date, schedule: OfficeScheduleConfig): string {
+  const dayTimings = parseDayTimings(schedule.dayTimings);
+  const dayOfWeek = formatInTimeZone(date, schedule.timezone, 'EEE').toUpperCase();
+  if (dayTimings[dayOfWeek]?.end) {
+    return dayTimings[dayOfWeek].end;
+  }
+  return schedule.closingTime || '18:00';
+}
 
 export async function getOfficeSchedule(): Promise<OfficeScheduleConfig> {
   const schedule = await prisma.officeSchedule.findUnique({
@@ -34,6 +91,7 @@ export async function getOfficeSchedule(): Promise<OfficeScheduleConfig> {
     timezone: schedule.timezone,
     allowOutsideHours: schedule.allowOutsideHours,
     autoCutoffEnabled: schedule.autoCutoffEnabled,
+    dayTimings: schedule.dayTimings || JSON.stringify(DEFAULT_DAY_TIMINGS),
   };
 }
 
@@ -50,24 +108,15 @@ export function evaluateTimeClassification(
   reason?: string;
 } {
   try {
-    const zonedDate = toZonedTime(date, schedule.timezone);
     const dayOfWeek = formatInTimeZone(date, schedule.timezone, 'EEE').toUpperCase(); // MON, TUE, etc.
     const timeOfDay = formatInTimeZone(date, schedule.timezone, 'HH:mm'); // 14:30
 
-    const validDays = schedule.workingDays.split(',').map((d) => d.trim().toUpperCase());
-    const isWorkingDay = validDays.includes(dayOfWeek);
+    // Resolve day-wise opening and closing times
+    const openingTime = getOpeningTimeForDate(date, schedule);
+    const closingTime = getClosingTimeForDate(date, schedule);
 
-    if (!isWorkingDay) {
-      return {
-        isOutsideHours: true,
-        classification: 'OUTSIDE_HOURS',
-        needsReview: true,
-        reason: `Tracked on ${dayOfWeek}, which is outside configured working days (${schedule.workingDays}).`,
-      };
-    }
-
-    const [openH, openM] = schedule.openingTime.split(':').map(Number);
-    const [closeH, closeM] = schedule.closingTime.split(':').map(Number);
+    const [openH, openM] = openingTime.split(':').map(Number);
+    const [closeH, closeM] = closingTime.split(':').map(Number);
     const [curH, curM] = timeOfDay.split(':').map(Number);
 
     const openMinutes = openH * 60 + openM;
@@ -81,10 +130,10 @@ export function evaluateTimeClassification(
           isOutsideHours: true,
           classification: 'OUTSIDE_HOURS',
           needsReview: true,
-          reason: `Tracked at ${timeOfDay}, outside standard hours ${schedule.openingTime}-${schedule.closingTime}.`,
+          reason: `Tracked at ${timeOfDay} on ${dayOfWeek}, outside standard hours ${openingTime}-${closingTime}.`,
         };
       }
-    } else {
+    } else if (closeMinutes < openMinutes) {
       // Overnight schedule (e.g., 20:00 to 05:00)
       const isInOvernight = currentMinutes >= openMinutes || currentMinutes < closeMinutes;
       if (!isInOvernight) {
@@ -92,7 +141,7 @@ export function evaluateTimeClassification(
           isOutsideHours: true,
           classification: 'OUTSIDE_HOURS',
           needsReview: true,
-          reason: `Tracked at ${timeOfDay}, outside overnight hours ${schedule.openingTime}-${schedule.closingTime}.`,
+          reason: `Tracked at ${timeOfDay} on ${dayOfWeek}, outside overnight hours ${openingTime}-${closingTime}.`,
         };
       }
     }
@@ -400,7 +449,8 @@ export async function enforceOfficeCutoffForUser(userId: string) {
     if (!startClass.isOutsideHours && nowClass.isOutsideHours) {
       // Calculate closing time cutoff timestamp on entry's day in org timezone
       const startZoned = toZonedTime(entry.startTime, schedule.timezone);
-      const [closeH, closeM] = schedule.closingTime.split(':').map(Number);
+      const closingTime = getClosingTimeForDate(entry.startTime, schedule);
+      const [closeH, closeM] = closingTime.split(':').map(Number);
       
       const cutoffDate = new Date(startZoned);
       cutoffDate.setHours(closeH, closeM, 0, 0);
@@ -417,7 +467,7 @@ export async function enforceOfficeCutoffForUser(userId: string) {
           duration: durationSeconds,
           status: 'AUTO_CUTOFF',
           source: 'AUTO_CUTOFF',
-          notes: (entry.notes ? entry.notes + ' ' : '') + `[Auto-stopped at office closing time ${schedule.closingTime}]`,
+          notes: (entry.notes ? entry.notes + ' ' : '') + `[Auto-stopped at office closing time ${closingTime}]`,
           updatedAt: now,
         },
       });
@@ -427,8 +477,8 @@ export async function enforceOfficeCutoffForUser(userId: string) {
         action: 'TIMER_AUTO_CUTOFF',
         targetEntity: 'TimeEntry',
         targetId: entry.id,
-        mandatoryReason: `Timer automatically stopped at office closing time (${schedule.closingTime}) under policy rules.`,
-        details: { userId, timeEntryId: entry.id, closingTime: schedule.closingTime },
+        mandatoryReason: `Timer automatically stopped at office closing time (${closingTime}) under policy rules.`,
+        details: { userId, timeEntryId: entry.id, closingTime },
       });
       continue;
     }
@@ -517,7 +567,8 @@ export async function enforceGlobalOfficeCutoffs() {
     // Case 2: Started inside office hours and current time is outside hours (closing cutoff)
     if (!startClass.isOutsideHours && nowClass.isOutsideHours) {
       const startZoned = toZonedTime(entry.startTime, schedule.timezone);
-      const [closeH, closeM] = schedule.closingTime.split(':').map(Number);
+      const closingTime = getClosingTimeForDate(entry.startTime, schedule);
+      const [closeH, closeM] = closingTime.split(':').map(Number);
       
       const cutoffDate = new Date(startZoned);
       cutoffDate.setHours(closeH, closeM, 0, 0);
@@ -533,7 +584,7 @@ export async function enforceGlobalOfficeCutoffs() {
           duration: durationSeconds,
           status: 'AUTO_CUTOFF',
           source: 'AUTO_CUTOFF',
-          notes: (entry.notes ? entry.notes + ' ' : '') + `[Auto-stopped at office closing time ${schedule.closingTime}]`,
+          notes: (entry.notes ? entry.notes + ' ' : '') + `[Auto-stopped at office closing time ${closingTime}]`,
           updatedAt: now,
         },
       });
@@ -543,8 +594,8 @@ export async function enforceGlobalOfficeCutoffs() {
         action: 'TIMER_AUTO_CUTOFF',
         targetEntity: 'TimeEntry',
         targetId: entry.id,
-        mandatoryReason: `Scheduled cutoff enforced at office closing time (${schedule.closingTime}).`,
-        details: { employeeId: entry.user.employeeId, entryId: entry.id },
+        mandatoryReason: `Scheduled cutoff enforced at office closing time (${closingTime}).`,
+        details: { employeeId: entry.user.employeeId, entryId: entry.id, closingTime },
       });
 
       processedCount++;

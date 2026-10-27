@@ -61,19 +61,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 function getPageMetadata(pathname: string) {
-  if (pathname === '/dashboard') return { title: 'Dashboard', subtitle: 'Overview & Real-time Metrics', section: 'CORE' };
-  if (pathname === '/employees') return { title: 'Employees', subtitle: 'Directory & Access Control', section: 'MANAGEMENT' };
-  if (pathname === '/projects') return { title: 'Projects', subtitle: 'Project Tracking & Allocations', section: 'MANAGEMENT' };
-  if (pathname.startsWith('/time-logs')) {
-    if (pathname.includes('outside')) return { title: 'Outside-Hours Review', subtitle: 'Overtime & Irregular Shift Auditing', section: 'SECURITY & AUDIT' };
-    return { title: 'Time Logs', subtitle: 'Time Entries & Activity History', section: 'TIME & TRACKING' };
-  }
-  if (pathname === '/reports') return { title: 'Reports & Analytics', subtitle: 'Working Hours & Project Summaries', section: 'TIME & TRACKING' };
-  if (pathname === '/corrections') return { title: 'Time Corrections', subtitle: 'Manual Requests & Approvals', section: 'TIME & TRACKING' };
-  if (pathname === '/settings/office-hours') return { title: 'Office Hours', subtitle: 'Working Schedules & Boundary Rules', section: 'CONFIGURATION' };
-  if (pathname === '/settings/email') return { title: 'Email Automation', subtitle: 'Scheduled EOD & Daily Reports', section: 'CONFIGURATION' };
-  if (pathname === '/settings/screenshots') return { title: 'Screenshot Module', subtitle: 'Compliance Capture Settings', section: 'CONFIGURATION' };
-  if (pathname === '/settings/audit-logs') return { title: 'Audit Trail', subtitle: 'Administrative Action Logs', section: 'SECURITY & AUDIT' };
+  if (pathname === '/dashboard') return { title: 'Dashboard', subtitle: 'Overview & Real-time Metrics', section: 'WORKSPACE' };
+  if (pathname === '/employees') return { title: 'Employees', subtitle: 'Directory & Access Control', section: 'ORGANIZATION' };
+  if (pathname === '/office-timings' || pathname === '/settings/office-hours') return { title: 'Office Timings', subtitle: 'Day-wise Schedules & Auto Cutoff', section: 'TIMINGS' };
+  if (pathname === '/mail' || pathname === '/settings/email') return { title: 'Mail', subtitle: 'Automated Reports & Delivery Audit', section: 'COMMUNICATION' };
+  if (pathname === '/screenshot' || pathname === '/settings/screenshots') return { title: 'Screenshot', subtitle: 'Activity Capture & Compliance History', section: 'MONITORING' };
   return { title: 'Workspace', subtitle: 'EL App Management System', section: 'WORKSPACE' };
 }
 
@@ -251,82 +243,26 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
 
   const isAdmin = user?.role === 'ADMIN';
 
-  interface NavItem {
-    href: string;
-    label: string;
-    icon: React.ComponentType<{ className?: string }>;
-    badge?: string | number;
-  }
-
-  interface NavSection {
-    title: string;
-    items: NavItem[];
-  }
-
-  const employeeNavSections: NavSection[] = [
-    {
-      title: 'WORKSPACE',
-      items: [
-        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/projects', label: 'My Projects', icon: FolderKanban },
-      ],
-    },
-    {
-      title: 'TIME & LOGS',
-      items: [
-        { href: '/time-logs', label: 'My Time Logs', icon: Clock },
-        { href: '/reports', label: 'My Reports', icon: FileSpreadsheet },
-        {
-          href: '/corrections',
-          label: 'Correction Requests',
-          icon: CheckSquare,
-          badge: pendingCorrectionsCount > 0 ? pendingCorrectionsCount : undefined,
-        },
-      ],
-    },
-  ];
-
-  const adminNavSections: NavSection[] = [
-    {
-      title: 'OVERVIEW',
-      items: [
-        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      ],
-    },
-    {
-      title: 'ORGANIZATION',
-      items: [
-        { href: '/employees', label: 'Employees', icon: Users },
-        { href: '/projects', label: 'Projects', icon: FolderKanban },
-      ],
-    },
-    {
-      title: 'TIME & COMPLIANCE',
-      items: [
-        { href: '/time-logs', label: 'All Time Logs', icon: Clock },
-        { href: '/reports', label: 'Reports & Analytics', icon: FileSpreadsheet },
-        {
-          href: '/corrections',
-          label: 'Correction Approvals',
-          icon: CheckSquare,
-          badge: pendingCorrectionsCount > 0 ? pendingCorrectionsCount : undefined,
-        },
-        { href: '/time-logs?filter=outside', label: 'Outside-Hours Review', icon: ShieldAlert },
-      ],
-    },
-    {
-      title: 'CONFIGURATION',
-      items: [
-        { href: '/settings/office-hours', label: 'Office Hours', icon: Building2 },
-        { href: '/settings/email', label: 'Email Automation', icon: Mail },
-        { href: '/settings/screenshots', label: 'Screenshot Module', icon: Camera },
-        { href: '/settings/audit-logs', label: 'Audit Trail', icon: History },
-      ],
-    },
-  ];
-
-  const navSections = isAdmin ? adminNavSections : employeeNavSections;
   const pageMeta = getPageMetadata(pathname);
+
+  // Required navigation items:
+  // Top: Dashboard, Employee
+  // Timer Section
+  // Below Timer Section: 1. Office Timings, 2. Mail, 3. Screenshot
+  const topNavItems = [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    ...(isAdmin ? [{ href: '/employees', label: 'Employee', icon: Users }] : []),
+  ];
+
+  const bottomNavItems = [
+    { href: '/office-timings', label: 'Office Timings', icon: Clock },
+    ...(isAdmin
+      ? [
+          { href: '/mail', label: 'Mail', icon: Mail },
+          { href: '/screenshot', label: 'Screenshot', icon: Camera },
+        ]
+      : []),
+  ];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white">
@@ -352,129 +288,169 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
 
-        {/* Running Timer Live Badge in Sidebar */}
-        {activeTimer && (
-          <div className="mx-3.5 mt-3.5 p-3 rounded-xl bg-gradient-to-br from-blue-950/70 to-indigo-950/40 border border-blue-500/30 shadow-lg shadow-blue-950/50 shrink-0 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between text-xs text-blue-300 font-semibold mb-1">
-              <span className="flex items-center gap-1.5 text-[11px] tracking-wide">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                TRACKING NOW
-              </span>
-              <span className="font-mono text-sm font-bold text-white bg-blue-900/40 px-2 py-0.5 rounded border border-blue-700/40">
-                {formatSecondsToTimer(elapsedSeconds)}
-              </span>
+        {/* Grouped Navigation Links with Timer Section in between */}
+        <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto overscroll-contain">
+          {/* Top Section: Dashboard, Employee */}
+          <div className="space-y-1">
+            <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+              MAIN
             </div>
-            <p className="text-xs text-slate-200 font-medium truncate mt-1.5">
-              {activeTimer.project.name}
-            </p>
-            <p className="text-[10px] text-slate-400 mt-1">
-              Started at {new Date(activeTimer.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-            </p>
-            {activeTimer.targetDuration && (
-              <div className="mt-2 pt-2 border-t border-slate-800/80">
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="text-amber-300 font-semibold flex items-center gap-1">
-                    <Moon className="w-3 h-3 text-amber-400" /> Overtime Limit
-                  </span>
-                  <span className="font-mono text-amber-200">
-                    {activeTimer.targetDuration - elapsedSeconds > 0
-                      ? `${formatSecondsToTimer(activeTimer.targetDuration - elapsedSeconds)} left`
-                      : 'Limit reached'}
-                  </span>
-                </div>
-                <div className="w-full bg-slate-900 rounded-full h-1.5 mt-1.5 overflow-hidden border border-slate-800">
-                  <div
-                    className="bg-gradient-to-r from-amber-500 to-indigo-500 h-1.5 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(100, Math.round((elapsedSeconds / activeTimer.targetDuration) * 100))}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-            {screenshotSetting?.enabled && (
-              <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-                <span className="text-slate-400">Activity Capture:</span>
-                {isScreenSharing ? (
-                  <span className="text-emerald-400 font-medium flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Desktop
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handlePromptShareScreen}
-                    className="text-blue-400 hover:text-blue-300 font-medium underline flex items-center gap-1 cursor-pointer"
-                  >
-                    Share Desktop
-                  </button>
-                )}
-              </div>
-            )}
-            <button
-              id="sidebar-stop-timer"
-              data-testid="sidebar-stop-timer"
-              onClick={() => {
-                stopTimer();
-                stopScreenStream();
-                setIsScreenSharing(false);
-              }}
-              className="mt-2.5 w-full py-1.5 px-3 rounded-lg bg-red-600/90 hover:bg-red-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-sm shadow-red-900/40 cursor-pointer"
-            >
-              <Square className="w-3.5 h-3.5 fill-current" /> Stop Timer
-            </button>
-          </div>
-        )}
-
-        {/* Grouped Navigation Links */}
-        <nav className="flex-1 px-3 py-3 space-y-5 overflow-y-auto overscroll-contain">
-          {navSections.map((section) => (
-            <div key={section.title} className="space-y-1">
-              <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                {section.title}
-              </div>
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href;
-                const navId = `nav-${item.href.replace(/\//g, '-').replace(/^-/, '').replace(/\?.*/, '')}`;
-                return (
-                  <Link
-                    key={item.href}
-                    id={navId}
-                    data-testid={navId}
-                    href={item.href}
-                    prefetch={true}
-                    className={`group relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 ${
-                      isActive
-                        ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30 shadow-sm shadow-blue-500/10'
-                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
+            {topNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              const navId = `nav-${item.href.replace(/\//g, '-').replace(/^-/, '')}`;
+              return (
+                <Link
+                  key={item.href}
+                  id={navId}
+                  data-testid={navId}
+                  href={item.href}
+                  prefetch={true}
+                  className={`group relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 ${
+                    isActive
+                      ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30 shadow-sm shadow-blue-500/10'
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <Icon
+                    className={`w-4 h-4 transition-colors ${
+                      isActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'
                     }`}
-                  >
-                    <Icon
-                      className={`w-4 h-4 transition-colors ${
-                        isActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'
-                      }`}
-                    />
-                    <span className="truncate">{item.label}</span>
-                    {item.badge !== undefined && (
-                      <span className="ml-auto px-2 py-0.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm animate-pulse">
-                        {item.badge}
-                      </span>
-                    )}
-                    {isActive && item.badge === undefined && (
-                      <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 shadow-sm shadow-blue-400"></span>
-                    )}
-                  </Link>
-                );
-              })}
+                  />
+                  <span className="truncate">{item.label}</span>
+                  {isActive && (
+                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 shadow-sm shadow-blue-400"></span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Modules Below Main Section: Office Timings, Mail, Screenshot */}
+          <div className="space-y-1">
+            <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+              MODULES
             </div>
-          ))}
+            {bottomNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              const navId = `nav-${item.href.replace(/\//g, '-').replace(/^-/, '')}`;
+              return (
+                <Link
+                  key={item.href}
+                  id={navId}
+                  data-testid={navId}
+                  href={item.href}
+                  prefetch={true}
+                  className={`group relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 ${
+                    isActive
+                      ? 'bg-blue-600/15 text-blue-400 border border-blue-500/30 shadow-sm shadow-blue-500/10'
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <Icon
+                    className={`w-4 h-4 transition-colors ${
+                      isActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'
+                    }`}
+                  />
+                  <span className="truncate">{item.label}</span>
+                  {isActive && (
+                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400 shadow-sm shadow-blue-400"></span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
         </nav>
 
         {/* User Card & Sign Out Footer */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-900/60 shrink-0">
+        <div className="p-3 border-t border-slate-800/80 bg-slate-900/60 shrink-0 space-y-2.5">
+          {/* Timer Section: Placed Above Username */}
+          <div>
+            {activeTimer ? (
+              <div className="p-3 rounded-xl bg-gradient-to-br from-blue-950/70 to-indigo-950/40 border border-blue-500/30 shadow-lg shadow-blue-950/50 shrink-0 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between text-xs text-blue-300 font-semibold mb-1">
+                  <span className="flex items-center gap-1.5 text-[11px] tracking-wide">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    TRACKING NOW
+                  </span>
+                  <span className="font-mono text-sm font-bold text-white bg-blue-900/40 px-2 py-0.5 rounded border border-blue-700/40">
+                    {formatSecondsToTimer(elapsedSeconds)}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-200 font-medium truncate mt-1.5">
+                  {activeTimer.project.name}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Started at {new Date(activeTimer.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </p>
+                {activeTimer.targetDuration && (
+                  <div className="mt-2 pt-2 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-amber-300 font-semibold flex items-center gap-1">
+                        <Moon className="w-3 h-3 text-amber-400" /> Overtime Limit
+                      </span>
+                      <span className="font-mono text-amber-200">
+                        {activeTimer.targetDuration - elapsedSeconds > 0
+                          ? `${formatSecondsToTimer(activeTimer.targetDuration - elapsedSeconds)} left`
+                          : 'Limit reached'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-900 rounded-full h-1.5 mt-1.5 overflow-hidden border border-slate-800">
+                      <div
+                        className="bg-gradient-to-r from-amber-500 to-indigo-500 h-1.5 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, Math.round((elapsedSeconds / activeTimer.targetDuration) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {screenshotSetting?.enabled && (
+                  <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Activity Capture:</span>
+                    {isScreenSharing ? (
+                      <span className="text-emerald-400 font-medium flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Desktop
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handlePromptShareScreen}
+                        className="text-blue-400 hover:text-blue-300 font-medium underline flex items-center gap-1 cursor-pointer"
+                      >
+                        Share Desktop
+                      </button>
+                    )}
+                  </div>
+                )}
+                <button
+                  id="sidebar-stop-timer"
+                  data-testid="sidebar-stop-timer"
+                  onClick={() => {
+                    stopTimer();
+                    stopScreenStream();
+                    setIsScreenSharing(false);
+                  }}
+                  className="mt-2.5 w-full py-1.5 px-3 rounded-lg bg-red-600/90 hover:bg-red-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-sm shadow-red-900/40 cursor-pointer"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" /> Stop Timer
+                </button>
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs text-slate-400 flex items-center gap-2.5">
+                <div className="w-2 h-2 rounded-full bg-slate-600 shrink-0"></div>
+                <div className="flex-1 truncate">
+                  <span className="font-semibold text-slate-300 block leading-tight">Timer Idle</span>
+                  <span className="text-[10px] text-slate-500">Ready to track on Dashboard</span>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/40 border border-slate-700/40 mb-2">
             <div className="flex items-center gap-2.5 overflow-hidden">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-sm">
@@ -567,12 +543,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                   <span>Stop</span>
                 </button>
               </div>
-            ) : (
-              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400">
-                <span className="w-2 h-2 rounded-full bg-slate-600"></span>
-                <span>Timer Idle</span>
-              </div>
-            )}
+            ) : null}
 
             {/* Date display */}
             {currentDateStr && (
@@ -588,6 +559,17 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                 {user?.name.charAt(0).toUpperCase()}
               </div>
               <div className="hidden lg:block text-left">
+                {activeTimer ? (
+                  <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-mono font-bold leading-tight">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>{formatSecondsToTimer(elapsedSeconds)}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium leading-tight">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                    <span>Timer Idle</span>
+                  </div>
+                )}
                 <p className="text-xs font-semibold text-white leading-tight truncate max-w-[100px]">{user?.name}</p>
                 <p className="text-[10px] text-slate-400 font-mono leading-tight">{user?.employeeId}</p>
               </div>
@@ -657,6 +639,17 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                     {user?.name.charAt(0)}
                   </div>
                   <div className="overflow-hidden">
+                    {activeTimer ? (
+                      <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-mono font-bold leading-tight">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Active: {formatSecondsToTimer(elapsedSeconds)}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium leading-tight">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                        <span>Timer Idle</span>
+                      </div>
+                    )}
                     <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
                     <p className="text-[10px] text-slate-400 font-mono">
                       {user?.employeeId} • {user?.role}
@@ -667,41 +660,97 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
 
               {/* Mobile Navigation links */}
               <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto">
-                {navSections.map((section) => (
-                  <div key={section.title} className="space-y-1">
-                    <div className="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      {section.title}
-                    </div>
-                    {section.items.map((item) => {
-                      const Icon = item.icon;
-                      const isActive = pathname === item.href;
-                      const mobileNavId = `mobile-nav-${item.href.replace(/\//g, '-').replace(/^-/, '').replace(/\?.*/, '')}`;
-                      return (
-                        <Link
-                          key={item.href}
-                          id={mobileNavId}
-                          data-testid={mobileNavId}
-                          href={item.href}
-                          prefetch={true}
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
-                            isActive
-                              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                              : 'text-slate-300 hover:bg-slate-800/60'
-                          }`}
-                        >
-                          <Icon className="w-4 h-4 shrink-0" />
-                          <span className="truncate">{item.label}</span>
-                          {item.badge !== undefined && (
-                            <span className="ml-auto px-2 py-0.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                              {item.badge}
-                            </span>
-                          )}
-                        </Link>
-                      );
-                    })}
+                {/* Top Section: Dashboard, Employee */}
+                <div className="space-y-1">
+                  <div className="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    MAIN
                   </div>
-                ))}
+                  {topNavItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = pathname === item.href;
+                    const mobileNavId = `mobile-nav-${item.href.replace(/\//g, '-').replace(/^-/, '')}`;
+                    return (
+                      <Link
+                        key={item.href}
+                        id={mobileNavId}
+                        data-testid={mobileNavId}
+                        href={item.href}
+                        prefetch={true}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
+                          isActive
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                            : 'text-slate-300 hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+
+                {/* Mobile Timer Section */}
+                <div className="space-y-1">
+                  <div className="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    TIMER
+                  </div>
+                  {activeTimer ? (
+                    <div className="p-3 rounded-xl bg-blue-950/70 border border-blue-600/40 space-y-2">
+                      <div className="flex items-center justify-between text-xs text-blue-200">
+                        <span className="font-semibold">{activeTimer.project.name}</span>
+                        <span className="font-mono font-bold text-white bg-blue-900/60 px-2 py-0.5 rounded">
+                          {formatSecondsToTimer(elapsedSeconds)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          stopTimer();
+                          stopScreenStream();
+                          setIsScreenSharing(false);
+                          setMobileMenuOpen(false);
+                        }}
+                        className="w-full py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold flex items-center justify-center gap-1"
+                      >
+                        <Square className="w-3.5 h-3.5 fill-current" /> Stop Timer
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-xl bg-slate-800/40 border border-slate-700/40 text-xs text-slate-400">
+                      Timer Idle • Ready on Dashboard
+                    </div>
+                  )}
+                </div>
+
+                {/* Three Modules Below Timer Section: 1. Office Timings, 2. Mail, 3. Screenshot */}
+                <div className="space-y-1">
+                  <div className="px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    MODULES
+                  </div>
+                  {bottomNavItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = pathname === item.href;
+                    const mobileNavId = `mobile-nav-${item.href.replace(/\//g, '-').replace(/^-/, '')}`;
+                    return (
+                      <Link
+                        key={item.href}
+                        id={mobileNavId}
+                        data-testid={mobileNavId}
+                        href={item.href}
+                        prefetch={true}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
+                          isActive
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                            : 'text-slate-300 hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               </nav>
 
               {/* Sign Out */}

@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { enforceGlobalOfficeCutoffs } from './timerEngine';
-import { sendDailySummaryEmail, sendWeeklySummaryEmail, getEmailSettings } from './emailService';
-import { processAutomatedScreenshotsForRunningTimers } from './screenshotGenerator';
+import { processScheduledEmailDispatch } from './emailService';
+import { processAutomatedScreenshotsForRunningTimers, cleanupOldScreenshots } from './screenshotGenerator';
 
 let isSchedulerInitialized = false;
 
@@ -11,8 +11,8 @@ export function initBackgroundScheduler() {
 
   console.log('⏰ Initializing EL App background worker & scheduler...');
 
-  // 1. Check office closing auto-cutoffs every 5 minutes
-  cron.schedule('*/5 * * * *', async () => {
+  // 1. Check office closing auto-cutoffs every minute
+  cron.schedule('* * * * *', async () => {
     try {
       const res = await enforceGlobalOfficeCutoffs();
       if (res.processed > 0) {
@@ -23,7 +23,7 @@ export function initBackgroundScheduler() {
     }
   });
 
-  // 2. Automated screenshot captures for running timers every minute
+  // 2. Automated screenshot captures for running active timers every minute
   cron.schedule('* * * * *', async () => {
     try {
       const res = await processAutomatedScreenshotsForRunningTimers();
@@ -35,21 +35,27 @@ export function initBackgroundScheduler() {
     }
   });
 
-  // 3. Check scheduled email dispatches every 15 minutes
-  cron.schedule('*/15 * * * *', async () => {
+  // 3. Automated screenshot retention cleanup every hour
+  cron.schedule('0 * * * *', async () => {
     try {
-      const settings = await getEmailSettings();
-      if (!settings?.enabled) return;
+      const res = await cleanupOldScreenshots();
+      if (res.deletedCount > 0) {
+        console.log(`🧹 [Scheduler] Retention cleanup deleted ${res.deletedCount} old screenshots.`);
+      }
+    } catch (err) {
+      console.error('[Scheduler] Screenshot retention cleanup failed:', err);
+    }
+  });
 
-      const now = new Date();
-      const currentHHmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  // Run cleanup once on startup as well
+  cleanupOldScreenshots().catch((err) => console.error('[Startup] Cleanup error:', err));
 
-      // Check daily email time match (within 15m window)
-      if (settings.dailyEnabled && settings.dailyTime) {
-        const [targetH, targetM] = settings.dailyTime.split(':').map(Number);
-        if (now.getHours() === targetH && Math.abs(now.getMinutes() - targetM) < 15) {
-          await sendDailySummaryEmail();
-        }
+  // 4. Check scheduled email dispatches every 5 minutes (Daily, Weekly, Monthly with deduplication)
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const res = await processScheduledEmailDispatch();
+      if (res.dispatched) {
+        console.log(`📧 [Scheduler] Dispatched ${res.type} report email successfully.`);
       }
     } catch (err) {
       console.error('[Scheduler] Email schedule check failed:', err);

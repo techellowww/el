@@ -2,8 +2,64 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { authenticate, requireAdmin, AuthRequest } from '../lib/auth';
 import { logAuditEvent } from '../lib/audit';
+import { cleanupOldScreenshots } from '../lib/screenshotGenerator';
 
 const router = Router();
+
+// GET /api/screenshots/settings
+router.get('/settings', async (req: AuthRequest, res: Response) => {
+  try {
+    const settings = await prisma.screenshotSetting.findUnique({
+      where: { id: 'default-screenshot-setting' },
+    });
+    res.json({ settings });
+  } catch (error) {
+    console.error('Error fetching screenshot settings:', error);
+    res.status(500).json({ error: 'Failed to retrieve screenshot settings' });
+  }
+});
+
+// PUT /api/screenshots/settings
+router.put('/settings', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { enabled, intervalMinutes, retentionDays, requireConsent, consentNotice } = req.body;
+    const parsedInterval = Math.max(1, parseInt(intervalMinutes, 10) || 60);
+    const parsedRetention = Math.max(1, parseInt(retentionDays, 10) || 30);
+
+    const updated = await prisma.screenshotSetting.upsert({
+      where: { id: 'default-screenshot-setting' },
+      update: {
+        enabled: Boolean(enabled),
+        intervalMinutes: parsedInterval,
+        retentionDays: parsedRetention,
+        requireConsent: requireConsent ?? true,
+        consentNotice: consentNotice || 'Screenshots are periodically captured for activity verification during active project timers.',
+      },
+      create: {
+        id: 'default-screenshot-setting',
+        enabled: Boolean(enabled),
+        intervalMinutes: parsedInterval,
+        retentionDays: parsedRetention,
+        requireConsent: requireConsent ?? true,
+        consentNotice: consentNotice || 'Screenshots are periodically captured for activity verification during active project timers.',
+      },
+    });
+
+    await logAuditEvent({
+      userId: req.user!.id,
+      action: 'SCREENSHOT_SETTINGS_UPDATED',
+      targetEntity: 'ScreenshotSetting',
+      targetId: 'default-screenshot-setting',
+      mandatoryReason: 'Admin updated screenshot capture and retention settings',
+      details: { enabled: updated.enabled, intervalMinutes: updated.intervalMinutes, retentionDays: updated.retentionDays },
+    });
+
+    res.json({ success: true, settings: updated });
+  } catch (error) {
+    console.error('Error updating screenshot settings:', error);
+    res.status(500).json({ error: 'Failed to update screenshot settings' });
+  }
+});
 
 // GET /api/screenshots - View screenshots with filtering by User and Date Range
 router.get('/', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
@@ -296,10 +352,27 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthRequest, res: 
       details: { screenshotId: id, userId: existing.userId },
     });
 
-    res.json({ success: true, message: 'Screenshot deleted successfully.' });
+    res.json({ success: true, message: 'Screenshot deleted successfully' });
   } catch (error) {
     console.error('Error deleting screenshot:', error);
-    res.status(500).json({ error: 'Failed to delete screenshot.' });
+    res.status(500).json({ error: 'Failed to delete screenshot' });
+  }
+});
+
+// POST /api/screenshots/cleanup - Automatic or manual retention cleanup
+router.post('/cleanup', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await cleanupOldScreenshots();
+    res.json({
+      success: true,
+      message: `Retention cleanup completed. Deleted ${result.deletedCount} screenshots older than ${result.retentionDays} days.`,
+      deletedCount: result.deletedCount,
+      retentionDays: result.retentionDays,
+      cutoffDate: result.cutoffDate,
+    });
+  } catch (error) {
+    console.error('Error running screenshot cleanup:', error);
+    res.status(500).json({ error: 'Failed to run screenshot cleanup' });
   }
 });
 

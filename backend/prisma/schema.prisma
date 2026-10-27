@@ -127,6 +127,7 @@ model OfficeSchedule {
   timezone          String   @default("Asia/Kolkata")
   allowOutsideHours Boolean  @default(true)
   autoCutoffEnabled Boolean  @default(true)
+  dayTimings        String?
   updatedById       String?
   updatedAt         DateTime @updatedAt
 
@@ -137,6 +138,7 @@ model ScreenshotSetting {
   id              String   @id @default("default-screenshot-setting")
   enabled         Boolean  @default(false)
   intervalMinutes Int      @default(60)
+  retentionDays   Int      @default(30)
   requireConsent  Boolean  @default(true)
   consentNotice   String   @default("Screenshots are periodically captured for activity verification during active project timers.")
   updatedAt       DateTime @updatedAt
@@ -164,6 +166,9 @@ model ScreenshotRecord {
 model EmailScheduleSetting {
   id            String   @id @default("default-email-setting")
   enabled       Boolean  @default(true)
+  scheduleType  String   @default("DAILY")
+  scheduleTime  String   @default("18:00")
+  monthlyDay    Int      @default(1)
   dailyEnabled  Boolean  @default(true)
   dailyTime     String   @default("19:00")
   weeklyEnabled Boolean  @default(true)
@@ -171,6 +176,7 @@ model EmailScheduleSetting {
   weeklyTime    String   @default("18:00")
   recipients    String   @default("admin@elapp.local")
   timezone      String   @default("Asia/Kolkata")
+  lastSentKey   String?
   smtpHost      String?  @default("smtp.gmail.com")
   smtpPort      Int?     @default(587)
   smtpUser      String?
