@@ -1,729 +1,163 @@
 import nodemailer from 'nodemailer';
 import { prisma } from './prisma';
-import { getDailyReport, getWeeklyReport, getCustomReport, formatDurationHours } from './reportEngine';
-import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
 
-export function formatDurationDetailed(seconds: number): string {
-  if (!seconds || seconds <= 0) return '0m';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-export function formatTimeAmPm(date: Date | string | null): string {
-  if (!date) return 'In Progress';
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
-export function parseRecipientEmails(rawRecipients?: string | string[] | null): string[] {
-  if (!rawRecipients) return [];
-  if (Array.isArray(rawRecipients)) {
-    return Array.from(
-      new Set(
-        rawRecipients
-          .flatMap((r) => parseRecipientEmails(r))
-          .filter(Boolean)
-      )
-    );
-  }
-  return Array.from(
-    new Set(
-      rawRecipients
-        .split(/[,;\s\n]+/)
-        .map((r) => r.trim().toLowerCase())
-        .filter((r) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r))
-    )
-  );
-}
-
-export async function getEmailSettings() {
-  const settings = await prisma.emailScheduleSetting.findUnique({
-    where: { id: 'default-email-setting' },
-  });
-
-  return settings;
-}
-
-export async function testSmtpConnection(customConfig?: {
+export interface SmtpConfig {
   host?: string;
   port?: number;
   user?: string;
   pass?: string;
-}) {
-  const settings = await getEmailSettings();
+  from?: string;
+}
 
-  const host = customConfig?.host || settings?.smtpHost || process.env.SMTP_HOST;
-  const port = customConfig?.port || settings?.smtpPort || (process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587);
-  const user = customConfig?.user || settings?.smtpUser || process.env.SMTP_USER;
-  const pass = customConfig?.pass || settings?.smtpPass || process.env.SMTP_PASS;
+async function getSmtpSettings(): Promise<SmtpConfig> {
+  const setting = await prisma.emailScheduleSetting.findFirst();
+  return {
+    host: setting?.smtpHost || process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: setting?.smtpPort || (process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587),
+    user: setting?.smtpUser || process.env.SMTP_USER || undefined,
+    pass: setting?.smtpPass || process.env.SMTP_PASS || undefined,
+    from: setting?.smtpFrom || process.env.SMTP_FROM || 'ClientHub Notifications <notifications@clienthub.local>',
+  };
+}
 
-  if (!host || !user || !pass) {
-    return {
-      success: false,
-      error: 'Incomplete SMTP settings: Host, Username, and Password are all required.',
-    };
-  }
+function createTransporter(cfg: SmtpConfig) {
+  return nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.port === 465,
+    auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
+    tls: { rejectUnauthorized: false },
+  } as any);
+}
 
+export async function testSmtpConnection(overrides?: SmtpConfig): Promise<{
+  success: boolean;
+  message?: string;
+  error?: string;
+  guidance?: string;
+}> {
   try {
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: {
-        user,
-        pass,
-      },
-    });
-
-    await transporter.verify();
-    return {
-      success: true,
-      message: `SMTP connection established and verified successfully with ${host}:${port} (${user}).`,
+    const defaults = await getSmtpSettings();
+    const cfg: SmtpConfig = {
+      host: overrides?.host || defaults.host,
+      port: overrides?.port || defaults.port,
+      user: overrides?.user || defaults.user,
+      pass: overrides?.pass || defaults.pass,
+      from: overrides?.from || defaults.from,
     };
+    const transporter = createTransporter(cfg);
+    await transporter.verify();
+    return { success: true, message: `SMTP connection to ${cfg.host}:${cfg.port} verified successfully.` };
   } catch (err: any) {
-    const rawError = err instanceof Error ? err.message : String(err);
-    let guidance = '';
-
-    if (
-      rawError.includes('535') ||
-      rawError.includes('BadCredentials') ||
-      rawError.toLowerCase().includes('username and password not accepted')
-    ) {
-      if (host.includes('gmail.com')) {
-        guidance =
-          'Google requires a 16-character App Password (with 2-Step Verification enabled). Normal Gmail account passwords are rejected. Generate an App Password at https://myaccount.google.com/apppasswords';
-      } else {
-        guidance = 'The SMTP server rejected the provided username or password. Please verify your credentials.';
-      }
-    }
-
     return {
       success: false,
-      error: rawError,
-      guidance,
+      error: err.message || 'SMTP connection failed',
+      guidance: 'Check host, port, username and password. For Gmail, use App Passwords.',
     };
   }
 }
 
-export async function sendEmailNotification({
-  to,
-  subject,
-  html,
-  type,
-}: {
-  to: string;
-  subject: string;
-  html: string;
-  type: string;
-}) {
-  const settings = await getEmailSettings();
+export async function sendCustomDateRangeReportEmail(options: {
+  startDate: string;
+  endDate: string;
+  recipients?: string[];
+}): Promise<{
+  success: boolean;
+  sentCount: number;
+  failedCount: number;
+  recipients?: string[];
+  error?: string;
+  results?: any[];
+}> {
+  const cfg = await getSmtpSettings();
+  const setting = await prisma.emailScheduleSetting.findFirst();
 
-  const host = settings?.smtpHost || process.env.SMTP_HOST;
-  const port = settings?.smtpPort || (process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587);
-  const user = settings?.smtpUser || process.env.SMTP_USER;
-  const pass = settings?.smtpPass || process.env.SMTP_PASS;
-  const from = settings?.smtpFrom || process.env.SMTP_FROM || 'EL App Notifications <notifications@elapp.local>';
+  let recipientList: string[] = [];
+  if (options.recipients && options.recipients.length > 0) {
+    recipientList = options.recipients;
+  } else if (setting?.recipients) {
+    recipientList = setting.recipients.split(',').map((r: string) => r.trim()).filter(Boolean);
+  }
 
-  const isConfigured = Boolean(host && user && pass);
+  if (recipientList.length === 0) {
+    return { success: false, sentCount: 0, failedCount: 0, error: 'No recipients configured.' };
+  }
 
-  let status: 'SENT' | 'FAILED' | 'SIMULATED' = 'SIMULATED';
-  let errorMessage: string | null = null;
+  // Fetch time data for the date range
+  const start = new Date(options.startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(options.endDate);
+  end.setHours(23, 59, 59, 999);
 
-  if (isConfigured) {
+  const entries = await prisma.timeEntry.findMany({
+    where: {
+      startedAt: { gte: start, lte: end },
+      isRunning: false,
+    },
+    include: {
+      project: { select: { id: true, name: true } },
+      client: { select: { id: true, name: true, company: true } },
+      user: { select: { id: true, name: true, email: true } },
+    },
+    orderBy: { startedAt: 'asc' },
+  });
+
+  const totalSeconds = entries.reduce((acc: number, e: any) => acc + (e.durationSeconds || 0), 0);
+  const totalHours = (totalSeconds / 3600).toFixed(2);
+
+  // Build simple HTML email
+  const subjectLine = `[EL App] Time Report — ${options.startDate} to ${options.endDate}`;
+  const htmlBody = buildReportEmailHtml({
+    startDate: options.startDate,
+    endDate: options.endDate,
+    entries,
+    totalSeconds,
+    totalHours,
+  });
+
+  const transporter = createTransporter(cfg);
+  const results: any[] = [];
+  let sentCount = 0;
+  let failedCount = 0;
+
+  for (const recipient of recipientList) {
     try {
-      const transporter = nodemailer.createTransport({
-        host: host || undefined,
-        port: port || 587,
-        secure: port === 465,
-        auth: {
-          user: user || undefined,
-          pass: pass || undefined,
+      await transporter.sendMail({
+        from: cfg.from,
+        to: recipient,
+        subject: subjectLine,
+        html: htmlBody,
+      });
+
+      await prisma.emailDeliveryLog.create({
+        data: {
+          type: 'CUSTOM_REPORT',
+          recipient,
+          subject: subjectLine,
+          status: 'SENT',
+          content: htmlBody.substring(0, 500),
+          sentAt: new Date(),
         },
       });
 
-      await transporter.sendMail({
-        from,
-        to,
-        subject,
-        html,
+      results.push({ recipient, status: 'SENT' });
+      sentCount++;
+    } catch (err: any) {
+      await prisma.emailDeliveryLog.create({
+        data: {
+          type: 'CUSTOM_REPORT',
+          recipient,
+          subject: subjectLine,
+          status: 'FAILED',
+          error: err.message || 'SMTP error',
+          sentAt: new Date(),
+        },
       });
 
-      status = 'SENT';
-    } catch (err) {
-      console.warn('SMTP delivery failed, recording simulated/failed log:', err);
-      status = 'FAILED';
-      errorMessage = err instanceof Error ? err.message : String(err);
-    }
-  } else {
-    // Simulated delivery mode
-    status = 'SIMULATED';
-  }
-
-  // Record in EmailDeliveryLog
-  const log = await prisma.emailDeliveryLog.create({
-    data: {
-      type,
-      recipient: to,
-      subject,
-      status,
-      content: html.substring(0, 1500),
-      error: errorMessage,
-      sentAt: status === 'SENT' || status === 'SIMULATED' ? new Date() : null,
-    },
-  });
-
-  return log;
-}
-
-/**
- * Generates rich HTML for the End-of-Day (EOD) Employee Hours Report
- * Formatted cleanly with Employee Name, Inside Hours, Outside Hours, and Total Hours.
- */
-export async function generateEodEmailHtml(date: Date = new Date()) {
-  const report = await getDailyReport({ date });
-
-  // 1. Fetch all active employees to know who was active and who had no recorded hours
-  const allActiveEmployees = await prisma.user.findMany({
-    where: { role: 'EMPLOYEE', isActive: true },
-    select: { id: true, name: true, employeeId: true, department: true },
-    orderBy: { name: 'asc' },
-  });
-
-  // Group raw entries by employee
-  const employeeEntriesMap = new Map<string, typeof report.rawEntries>();
-  for (const entry of report.rawEntries) {
-    if (!employeeEntriesMap.has(entry.userId)) {
-      employeeEntriesMap.set(entry.userId, []);
-    }
-    employeeEntriesMap.get(entry.userId)!.push(entry);
-  }
-
-  // Active employees who logged time
-  const recordedEmployeesData = report.employeeBreakdown.map((emp) => {
-    const entries = employeeEntriesMap.get(emp.user.id) || [];
-    return {
-      user: emp.user,
-      totalDuration: emp.totalDuration,
-      regularDuration: emp.regularDuration, // Inside Hours
-      outsideHoursDuration: emp.outsideHoursDuration, // Outside Hours
-      entries,
-    };
-  });
-
-  // Active employees who did NOT log time today
-  const recordedUserIds = new Set(report.employeeBreakdown.map((e) => e.user.id));
-  const unrecordedEmployees = allActiveEmployees.filter((e) => !recordedUserIds.has(e.id));
-
-  const formattedDate = new Date(report.date).toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-
-  // Inside hours calculation across report
-  const insideSeconds = report.regularSeconds || Math.max(0, report.totalTrackedSeconds - report.outsideHoursSeconds);
-
-  // 1. Employee Hours Summary Rows (Employee Name, Inside Hours, Outside Hours, Total Hours)
-  const employeeSummaryRowsHtml = recordedEmployeesData.length === 0
-    ? `<tr><td colspan="4" style="padding: 20px; text-align: center; color: #64748b; font-size: 13px;">No employee hours recorded for this date.</td></tr>`
-    : recordedEmployeesData.map((emp) => `
-        <tr style="border-bottom: 1px solid #f1f5f9;">
-          <td style="padding: 14px 16px;">
-            <div style="font-weight: 700; font-size: 14px; color: #0f172a;">${emp.user.name}</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 3px;">
-              <span style="font-family: monospace;">[${emp.user.employeeId}]</span>
-              <span style="color: #2563eb; background: #eff6ff; padding: 1px 6px; border-radius: 4px; margin-left: 6px;">${emp.user.department || 'General'}</span>
-            </div>
-          </td>
-          <td style="padding: 14px 16px; text-align: center;">
-            <span style="display: inline-block; background: #ecfdf5; color: #047857; font-weight: 700; font-size: 13px; padding: 4px 12px; border-radius: 6px;">
-              ${formatDurationDetailed(emp.regularDuration)}
-            </span>
-          </td>
-          <td style="padding: 14px 16px; text-align: center;">
-            <span style="display: inline-block; background: ${emp.outsideHoursDuration > 0 ? '#fef3c7' : '#f8fafc'}; color: ${emp.outsideHoursDuration > 0 ? '#b45309' : '#94a3b8'}; font-weight: 700; font-size: 13px; padding: 4px 12px; border-radius: 6px;">
-              ${formatDurationDetailed(emp.outsideHoursDuration)}
-            </span>
-          </td>
-          <td style="padding: 14px 16px; text-align: right;">
-            <span style="font-weight: 800; font-size: 15px; color: #0f172a;">
-              ${formatDurationDetailed(emp.totalDuration)}
-            </span>
-          </td>
-        </tr>
-      `).join('');
-
-  // 2. Individual Employee Session Logs (Timings, Duration, Inside/Outside classification, Notes - NO PROJECT!)
-  const employeeSessionDetailsHtml = recordedEmployeesData.length === 0
-    ? ''
-    : `
-      <div style="margin-top: 32px;">
-        <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">
-          <h3 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;">
-            ⏱️ Individual Session Timings
-          </h3>
-          <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">
-            Exact clock-in / clock-out periods and activity classifications logged today.
-          </p>
-        </div>
-
-        ${recordedEmployeesData.map((emp) => {
-          const rows = emp.entries.map((entry) => `
-            <tr style="border-bottom: 1px solid #f1f5f9;">
-              <td style="padding: 10px 14px; font-family: monospace; font-size: 12px; color: #334155; white-space: nowrap;">
-                <strong>${formatTimeAmPm(entry.startTime)}</strong> → <strong>${formatTimeAmPm(entry.endTime)}</strong>
-              </td>
-              <td style="padding: 10px 14px; font-weight: 600; color: #0f172a; font-size: 13px; white-space: nowrap;">
-                ${formatDurationDetailed(entry.duration)}
-              </td>
-              <td style="padding: 10px 14px; white-space: nowrap;">
-                ${entry.isOutsideHours
-                  ? `<span style="background: #fef3c7; color: #b45309; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600;">Outside Hours</span>`
-                  : `<span style="background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600;">Inside Hours</span>`
-                }
-              </td>
-              <td style="padding: 10px 14px; font-size: 12px; color: #64748b;">
-                ${entry.notes ? entry.notes : '<span style="color: #cbd5e1; font-style: italic;">No task notes</span>'}
-              </td>
-            </tr>
-          `).join('');
-
-          return `
-            <div style="margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff;">
-              <div style="background: #f8fafc; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                <span style="font-weight: 700; font-size: 14px; color: #0f172a;">${emp.user.name}</span>
-                <span style="font-size: 12px; color: #475569;">
-                  Inside: <strong style="color: #047857;">${formatDurationDetailed(emp.regularDuration)}</strong> &nbsp;|&nbsp; 
-                  Outside: <strong style="color: #b45309;">${formatDurationDetailed(emp.outsideHoursDuration)}</strong> &nbsp;|&nbsp; 
-                  Total: <strong style="color: #0f172a;">${formatDurationDetailed(emp.totalDuration)}</strong>
-                </span>
-              </div>
-              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                <thead>
-                  <tr style="background: #ffffff; color: #64748b; text-align: left; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">
-                    <th style="padding: 8px 14px;">Timings (Start → End)</th>
-                    <th style="padding: 8px 14px;">Duration</th>
-                    <th style="padding: 8px 14px;">Classification</th>
-                    <th style="padding: 8px 14px;">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rows}
-                </tbody>
-              </table>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-
-  // Unrecorded employees notice
-  const unrecordedHtml = unrecordedEmployees.length > 0
-    ? `
-      <div style="margin-top: 24px; padding: 14px 18px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; font-size: 13px;">
-        <strong style="color: #92400e; display: block; margin-bottom: 4px;">
-          ⚠️ Unrecorded Employees (${unrecordedEmployees.length}):
-        </strong>
-        <span style="color: #78350f;">
-          The following active employees had no tracked hours recorded today:
-          <strong>${unrecordedEmployees.map((e) => `${e.name} (${e.employeeId})`).join(', ')}</strong>.
-        </span>
-      </div>
-    `
-    : '';
-
-  const subject = `[EL App] End of Day (EOD) Operations Report — ${formattedDate}`;
-
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>${subject}</title>
-      </head>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px; color: #1e293b;">
-        <div style="max-width: 780px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); border: 1px solid #e2e8f0;">
-          
-          <!-- Header Banner -->
-          <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 28px 32px; color: #ffffff;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <span style="display: inline-block; background: #2563eb; color: #ffffff; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">
-                  EL App Enterprise
-                </span>
-                <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.025em;">
-                  End-of-Day (EOD) Operations Report
-                </h1>
-                <p style="margin: 6px 0 0 0; font-size: 13px; color: #94a3b8;">
-                  Operations & Work Hours Ledger for <strong>${formattedDate}</strong>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Body Content -->
-          <div style="padding: 28px 32px;">
-
-            <!-- Summary KPI Grid (Total Hours, Active Employees, Inside Hours, Outside Hours) -->
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px;">
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-                <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Total Hours</div>
-                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 4px;">
-                  ${formatDurationHours(report.totalTrackedSeconds)}
-                </div>
-              </div>
-
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-                <div style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">Active Employees</div>
-                <div style="font-size: 20px; font-weight: 800; color: #2563eb; margin-top: 4px;">
-                  ${recordedEmployeesData.length} <span style="font-size: 12px; font-weight: normal; color: #64748b;">/ ${allActiveEmployees.length}</span>
-                </div>
-              </div>
-
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-                <div style="font-size: 11px; font-weight: 600; color: #047857; text-transform: uppercase;">Inside Hours</div>
-                <div style="font-size: 20px; font-weight: 800; color: #047857; margin-top: 4px;">
-                  ${formatDurationDetailed(insideSeconds)}
-                </div>
-              </div>
-
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-                <div style="font-size: 11px; font-weight: 600; color: #b45309; text-transform: uppercase;">Outside Hours</div>
-                <div style="font-size: 20px; font-weight: 800; color: ${report.outsideHoursSeconds > 0 ? '#d97706' : '#64748b'}; margin-top: 4px;">
-                  ${formatDurationDetailed(report.outsideHoursSeconds)}
-                </div>
-              </div>
-            </div>
-
-            <!-- Employee Hours Summary Table -->
-            <div style="margin-bottom: 24px;">
-              <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 14px;">
-                <h2 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">
-                  👥 Employee Hours Summary
-                </h2>
-                <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">
-                  Inside hours, outside hours, and total recorded working time per employee.
-                </p>
-              </div>
-
-              <div style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                  <thead>
-                    <tr style="background: #f8fafc; color: #475569; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0;">
-                      <th style="padding: 12px 16px;">Employee Name</th>
-                      <th style="padding: 12px 16px; text-align: center;">Inside Hours</th>
-                      <th style="padding: 12px 16px; text-align: center;">Outside Hours</th>
-                      <th style="padding: 12px 16px; text-align: right;">Total Hours</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${employeeSummaryRowsHtml}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Session Details (Start -> End Timings) -->
-            ${employeeSessionDetailsHtml}
-
-            <!-- Unrecorded Notice -->
-            ${unrecordedHtml}
-
-            <!-- Footer Notice -->
-            <div style="margin-top: 36px; border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.6;">
-              <p style="margin: 0;">
-                This End-of-Day (EOD) Operations Summary was automatically compiled and dispatched by <strong>EL App</strong>.
-              </p>
-              <p style="margin: 4px 0 0 0;">
-                Generated at ${new Date().toLocaleTimeString()} • Timezone: ${process.env.APP_TIMEZONE || 'Asia/Kolkata'}
-              </p>
-            </div>
-
-          </div>
-        </div>
-      </body>
-    </html>
-  `;
-
-  return {
-    subject,
-    html,
-    summary: {
-      date: report.date,
-      formattedDate,
-      totalHours: formatDurationHours(report.totalTrackedSeconds),
-      activeEmployeesCount: recordedEmployeesData.length,
-      totalEmployeesCount: allActiveEmployees.length,
-      insideHours: formatDurationDetailed(insideSeconds),
-      outsideHours: formatDurationDetailed(report.outsideHoursSeconds),
-    },
-  };
-}
-
-/**
- * Sends the End-of-Day (EOD) report to all configured EOD recipients.
- * Accepts as many recipient email addresses as provided or configured.
- */
-export async function sendEodReportEmail(customRecipients?: string[] | string) {
-  const settings = await getEmailSettings();
-
-  const recipientList = customRecipients
-    ? parseRecipientEmails(customRecipients)
-    : parseRecipientEmails(settings?.recipients || 'ellowwwstudio@gmail.com');
-
-  if (recipientList.length === 0) {
-    return {
-      success: false,
-      error: 'No valid recipient email addresses configured for EOD report sharing.',
-      recipients: [],
-    };
-  }
-
-  const { html, subject, summary } = await generateEodEmailHtml(new Date());
-
-  const results: Array<{ recipient: string; status: string; logId: string; error: string | null }> = [];
-
-  for (const recipient of recipientList) {
-    const log = await sendEmailNotification({
-      to: recipient,
-      subject,
-      html,
-      type: 'EOD_REPORT',
-    });
-    results.push({
-      recipient,
-      status: log.status,
-      logId: log.id,
-      error: log.error,
-    });
-  }
-
-  const sentCount = results.filter((r) => r.status === 'SENT' || r.status === 'SIMULATED').length;
-  const failedCount = results.filter((r) => r.status === 'FAILED').length;
-
-  return {
-    success: sentCount > 0,
-    sentCount,
-    failedCount,
-    recipients: recipientList,
-    results,
-    summary,
-  };
-}
-
-/**
- * Generates and delivers the Daily Summary email to administrators (EOD).
- */
-export async function sendDailySummaryEmail(targetRecipient?: string) {
-  const settings = await getEmailSettings();
-  if (!settings?.enabled || !settings?.dailyEnabled) {
-    return { skipped: true, reason: 'Daily EOD emails disabled in settings' };
-  }
-
-  return sendEodReportEmail(targetRecipient ? [targetRecipient] : undefined);
-}
-
-/**
- * Generates and delivers the Weekly Summary email.
- */
-export async function sendWeeklySummaryEmail(targetRecipient?: string) {
-  const settings = await getEmailSettings();
-  if (!settings?.enabled || !settings?.weeklyEnabled) {
-    return { skipped: true, reason: 'Weekly emails disabled in settings' };
-  }
-
-  const recipients = targetRecipient ? parseRecipientEmails(targetRecipient) : parseRecipientEmails(settings.recipients);
-  const report = await getWeeklyReport({ date: new Date() });
-
-  // Aggregate hours by employee
-  const employeeMap = new Map<string, { name: string; employeeId: string; insideSeconds: number; outsideSeconds: number; totalSeconds: number }>();
-  for (const entry of report.rawEntries || []) {
-    if (!employeeMap.has(entry.userId)) {
-      employeeMap.set(entry.userId, {
-        name: entry.user.name,
-        employeeId: entry.user.employeeId,
-        insideSeconds: 0,
-        outsideSeconds: 0,
-        totalSeconds: 0,
-      });
-    }
-    const emp = employeeMap.get(entry.userId)!;
-    emp.totalSeconds += entry.duration;
-    if (entry.isOutsideHours) emp.outsideSeconds += entry.duration;
-    else emp.insideSeconds += entry.duration;
-  }
-
-  const employeeRows = Array.from(employeeMap.values()).map(
-    (e) => `
-    <tr style="border-bottom: 1px solid #e5e7eb;">
-      <td style="padding: 10px 14px; font-weight: 600; color: #111827;">${e.name} <span style="color: #6b7280; font-size: 11px; font-family: monospace;">[${e.employeeId}]</span></td>
-      <td style="padding: 10px 14px; text-align: center;"><span style="background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.insideSeconds)}</span></td>
-      <td style="padding: 10px 14px; text-align: center;"><span style="background: ${e.outsideSeconds > 0 ? '#fef3c7' : '#f3f4f6'}; color: ${e.outsideSeconds > 0 ? '#b45309' : '#9ca3af'}; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.outsideSeconds)}</span></td>
-      <td style="padding: 10px 14px; text-align: right; font-weight: bold; color: #0f172a;">${formatDurationDetailed(e.totalSeconds)}</td>
-    </tr>
-  `
-  ).join('');
-
-  const html = `
-    <div style="font-family: sans-serif; max-width: 650px; margin: 0 auto; color: #1f2937;">
-      <h2 style="color: #111827; border-bottom: 2px solid #10b981; padding-bottom: 8px;">EL App — Weekly Operations Summary</h2>
-      <p>Period: <strong>${report.weekStart} to ${report.weekEnd}</strong></p>
-      
-      <div style="background: #f3f4f6; padding: 14px; border-radius: 8px; margin: 16px 0; display: flex; gap: 16px; justify-content: space-around; text-align: center;">
-        <div>
-          <div style="font-size: 11px; color: #6b7280; text-transform: uppercase;">Total Tracked</div>
-          <div style="font-size: 20px; font-weight: bold; color: #111827; margin-top: 2px;">${formatDurationHours(report.totalTrackedSeconds)}</div>
-        </div>
-        <div>
-          <div style="font-size: 11px; color: #047857; text-transform: uppercase;">Inside Hours</div>
-          <div style="font-size: 20px; font-weight: bold; color: #047857; margin-top: 2px;">${formatDurationHours(report.weekInsideSeconds)}</div>
-        </div>
-        <div>
-          <div style="font-size: 11px; color: #b45309; text-transform: uppercase;">Outside Hours</div>
-          <div style="font-size: 20px; font-weight: bold; color: #b45309; margin-top: 2px;">${formatDurationHours(report.weekOutsideSeconds)}</div>
-        </div>
-      </div>
-
-      <h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">👥 Employee Hours Breakdown</h3>
-      <table style="width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-        <thead>
-          <tr style="background: #f9fafb; text-align: left; border-bottom: 1px solid #e5e7eb;">
-            <th style="padding: 10px 14px;">Employee</th>
-            <th style="padding: 10px 14px; text-align: center;">Inside Hours</th>
-            <th style="padding: 10px 14px; text-align: center;">Outside Hours</th>
-            <th style="padding: 10px 14px; text-align: right;">Total Hours</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${employeeRows || '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #6b7280;">No hours tracked this week.</td></tr>'}
-        </tbody>
-      </table>
-      
-      <p style="margin-top: 24px; font-size: 11px; color: #9ca3af; text-align: center;">
-        Generated automatically by EL App — Employee Time Tracking System.
-      </p>
-    </div>
-  `;
-
-  for (const r of recipients) {
-    if (r) {
-      await sendEmailNotification({
-        to: r,
-        subject: `[EL App] Weekly Operations Summary — ${report.weekStart} to ${report.weekEnd}`,
-        html,
-        type: 'WEEKLY_SUMMARY',
-      });
+      results.push({ recipient, status: 'FAILED', error: err.message });
+      failedCount++;
     }
   }
-
-  return { success: true, count: recipients.length };
-}
-
-/**
- * Generates and delivers the Monthly Summary email.
- */
-export async function sendMonthlySummaryEmail(targetRecipient?: string | string[]) {
-  const settings = await getEmailSettings();
-  const recipientList = targetRecipient
-    ? parseRecipientEmails(targetRecipient)
-    : parseRecipientEmails(settings?.recipients);
-
-  if (recipientList.length === 0) {
-    return { success: false, error: 'No recipient email addresses configured.' };
-  }
-
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-
-  const report = await getCustomReport({
-    startDate: monthStart,
-    endDate: monthEnd,
-  });
-
-  const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-  const employeeRows = (report.employeeBreakdown || [])
-    .map(
-      (e) => `
-    <tr style="border-bottom: 1px solid #e5e7eb;">
-      <td style="padding: 10px 14px; font-weight: 600; color: #111827;">${e.user.name} <span style="color: #6b7280; font-size: 11px; font-family: monospace;">[${e.user.employeeId}]</span></td>
-      <td style="padding: 10px 14px; text-align: center;"><span style="background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.regularDuration)}</span></td>
-      <td style="padding: 10px 14px; text-align: center;"><span style="background: ${e.outsideHoursDuration > 0 ? '#fef3c7' : '#f3f4f6'}; color: ${e.outsideHoursDuration > 0 ? '#b45309' : '#9ca3af'}; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.outsideHoursDuration)}</span></td>
-      <td style="padding: 10px 14px; text-align: right; font-weight: bold; color: #0f172a;">${formatDurationDetailed(e.totalDuration)}</td>
-    </tr>
-  `
-    )
-    .join('');
-
-  const html = `
-    <div style="font-family: sans-serif; max-width: 650px; margin: 0 auto; color: #1f2937;">
-      <h2 style="color: #111827; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;">EL App — Monthly Operations Summary (${monthName})</h2>
-      <p>Period: <strong>${monthStart.toLocaleDateString()} to ${monthEnd.toLocaleDateString()}</strong></p>
-      
-      <div style="background: #f3f4f6; padding: 14px; border-radius: 8px; margin: 16px 0; display: flex; gap: 16px; justify-content: space-around; text-align: center;">
-        <div>
-          <div style="font-size: 11px; color: #6b7280; text-transform: uppercase;">Total Hours</div>
-          <div style="font-size: 20px; font-weight: bold; color: #111827; margin-top: 2px;">${formatDurationHours(report.totalTrackedSeconds)}</div>
-        </div>
-        <div>
-          <div style="font-size: 11px; color: #047857; text-transform: uppercase;">Inside Hours</div>
-          <div style="font-size: 20px; font-weight: bold; color: #047857; margin-top: 2px;">${formatDurationHours(report.regularSeconds)}</div>
-        </div>
-        <div>
-          <div style="font-size: 11px; color: #b45309; text-transform: uppercase;">Outside Hours</div>
-          <div style="font-size: 20px; font-weight: bold; color: #b45309; margin-top: 2px;">${formatDurationHours(report.outsideHoursSeconds)}</div>
-        </div>
-      </div>
-
-      <h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">👥 Employee Hours Breakdown</h3>
-      <table style="width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-        <thead>
-          <tr style="background: #f9fafb; text-align: left; border-bottom: 1px solid #e5e7eb;">
-            <th style="padding: 10px 14px;">Employee</th>
-            <th style="padding: 10px 14px; text-align: center;">Inside Hours</th>
-            <th style="padding: 10px 14px; text-align: center;">Outside Hours</th>
-            <th style="padding: 10px 14px; text-align: right;">Total Hours</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${employeeRows || '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #6b7280;">No employee activity recorded this month.</td></tr>'}
-        </tbody>
-      </table>
-      
-      <p style="margin-top: 24px; font-size: 11px; color: #9ca3af; text-align: center;">
-        Generated automatically by EL App — Employee Time Tracking System.
-      </p>
-    </div>
-  `;
-
-  const results: Array<{ recipient: string; status: string; logId: string; error: string | null }> = [];
-  for (const r of recipientList) {
-    const log = await sendEmailNotification({
-      to: r,
-      subject: `[EL App] Monthly Operations Report — ${monthName}`,
-      html,
-      type: 'MONTHLY_SUMMARY',
-    });
-    results.push({
-      recipient: r,
-      status: log.status,
-      logId: log.id,
-      error: log.error,
-    });
-  }
-
-  const sentCount = results.filter((r) => r.status === 'SENT' || r.status === 'SIMULATED').length;
-  const failedCount = results.filter((r) => r.status === 'FAILED').length;
 
   return {
     success: sentCount > 0,
@@ -734,204 +168,324 @@ export async function sendMonthlySummaryEmail(targetRecipient?: string | string[
   };
 }
 
-/**
- * Generates and delivers a Custom Date-Range Report email manually requested by an Administrator.
- */
-export async function sendCustomDateRangeReportEmail({
-  startDate,
-  endDate,
-  recipients: customRecipients,
-}: {
+function buildReportEmailHtml(opts: {
   startDate: string;
   endDate: string;
-  recipients?: string | string[];
-}) {
-  const settings = await getEmailSettings();
-  const recipientList = customRecipients
-    ? parseRecipientEmails(customRecipients)
-    : parseRecipientEmails(settings?.recipients);
+  entries: any[];
+  totalSeconds: number;
+  totalHours: string;
+}): string {
+  const { startDate, endDate, entries, totalHours } = opts;
 
-  if (recipientList.length === 0) {
-    return { success: false, error: 'No recipient email addresses provided or configured.' };
+  let rowsHtml = '';
+
+  if (!entries || entries.length === 0) {
+    rowsHtml = `<tr>
+      <td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;border-bottom:1px solid #e2e8f0">No time entries recorded for this date range.</td>
+    </tr>`;
+  } else {
+    const sortedEntries = [...entries].sort((a: any, b: any) => {
+      const timeA = new Date(a.startedAt).getTime();
+      const timeB = new Date(b.startedAt).getTime();
+
+      const dateA = new Date(a.startedAt).toLocaleDateString();
+      const dateB = new Date(b.startedAt).toLocaleDateString();
+      if (dateA !== dateB) return timeA - timeB;
+
+      const nameA = a.user?.name || 'Unknown';
+      const nameB = b.user?.name || 'Unknown';
+      if (nameA !== nameB) return nameA.localeCompare(nameB);
+
+      return timeA - timeB;
+    });
+
+    interface EmployeeGroup {
+      employeeName: string;
+      entries: any[];
+    }
+
+    interface DateGroup {
+      dateStr: string;
+      totalRows: number;
+      employees: EmployeeGroup[];
+    }
+
+    const dateGroups: DateGroup[] = [];
+    for (const entry of sortedEntries) {
+      const dateStr = new Date(entry.startedAt).toLocaleDateString();
+      const empName = entry.user?.name || 'Unknown';
+
+      let dGroup = dateGroups.find((g) => g.dateStr === dateStr);
+      if (!dGroup) {
+        dGroup = { dateStr, totalRows: 0, employees: [] };
+        dateGroups.push(dGroup);
+      }
+      dGroup.totalRows++;
+
+      let eGroup = dGroup.employees.find((e) => e.employeeName === empName);
+      if (!eGroup) {
+        eGroup = { employeeName: empName, entries: [] };
+        dGroup.employees.push(eGroup);
+      }
+      eGroup.entries.push(entry);
+    }
+
+    rowsHtml = dateGroups
+      .map((dGroup) => {
+        let isFirstDateRow = true;
+
+        return dGroup.employees
+          .map((eGroup) => {
+            let isFirstEmpRow = true;
+            const empRowCount = eGroup.entries.length;
+
+            return eGroup.entries
+              .map((entry: any) => {
+                const dateCell = isFirstDateRow
+                  ? `<td rowspan="${dGroup.totalRows}" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;border-right:1px solid #f1f5f9;vertical-align:top;font-weight:600;color:#0f172a;background:#ffffff">${dGroup.dateStr}</td>`
+                  : '';
+                if (isFirstDateRow) isFirstDateRow = false;
+
+                const empCell = isFirstEmpRow
+                  ? `<td rowspan="${empRowCount}" style="padding:10px 12px;border-bottom:1px solid #e2e8f0;border-right:1px solid #f1f5f9;vertical-align:top;font-weight:600;color:#0f172a;background:#ffffff">${eGroup.employeeName}</td>`
+                  : '';
+                if (isFirstEmpRow) isFirstEmpRow = false;
+
+                return `<tr>
+                  ${dateCell}
+                  ${empCell}
+                  <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#334155">${entry.project?.name || '—'}</td>
+                  <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#64748b">${entry.client?.name || '—'}</td>
+                  <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;font-weight:600;color:#0f172a">${formatSecondsToHHMM(entry.durationSeconds || 0)}</td>
+                </tr>`;
+              })
+              .join('');
+          })
+          .join('');
+      })
+      .join('');
   }
 
-  const start = new Date(startDate);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(endDate);
-  end.setHours(23, 59, 59, 999);
-
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    return { success: false, error: 'Invalid start date or end date format.' };
-  }
-
-  if (end < start) {
-    return { success: false, error: 'End date must be on or after start date.' };
-  }
-
-  const report = await getCustomReport({ startDate: start, endDate: end });
-
-  const employeeRows = (report.employeeBreakdown || [])
-    .map(
-      (e) => `
-    <tr style="border-bottom: 1px solid #e5e7eb;">
-      <td style="padding: 10px 14px; font-weight: 600; color: #111827;">${e.user.name} <span style="color: #6b7280; font-size: 11px; font-family: monospace;">[${e.user.employeeId}]</span></td>
-      <td style="padding: 10px 14px; text-align: center;"><span style="background: #ecfdf5; color: #047857; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.regularDuration)}</span></td>
-      <td style="padding: 10px 14px; text-align: center;"><span style="background: ${e.outsideHoursDuration > 0 ? '#fef3c7' : '#f3f4f6'}; color: ${e.outsideHoursDuration > 0 ? '#b45309' : '#9ca3af'}; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${formatDurationDetailed(e.outsideHoursDuration)}</span></td>
-      <td style="padding: 10px 14px; text-align: right; font-weight: bold; color: #0f172a;">${formatDurationDetailed(e.totalDuration)}</td>
-    </tr>
-  `
-    )
-    .join('');
-
-  const html = `
-    <div style="font-family: sans-serif; max-width: 650px; margin: 0 auto; color: #1f2937;">
-      <h2 style="color: #111827; border-bottom: 2px solid #2563eb; padding-bottom: 8px;">EL App — Operations Activity Report</h2>
-      <p>Report Range: <strong>${startDate} to ${endDate}</strong></p>
-      
-      <div style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 14px; border-radius: 8px; margin: 16px 0; display: flex; gap: 16px; justify-content: space-around; text-align: center;">
-        <div>
-          <div style="font-size: 11px; color: #0284c7; text-transform: uppercase;">Total Hours</div>
-          <div style="font-size: 20px; font-weight: bold; color: #0369a1; margin-top: 2px;">${formatDurationHours(report.totalTrackedSeconds)}</div>
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8" /></head>
+    <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f1f5f9;margin:0;padding:24px;color:#1e293b">
+      <div style="max-width:800px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+        <div style="background:linear-gradient(135deg,#0f172a,#1e293b);padding:28px 32px;color:#fff">
+          <span style="display:inline-block;background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:3px 8px;border-radius:4px;text-transform:uppercase;margin-bottom:8px">EL App</span>
+          <h1 style="margin:0;font-size:22px;font-weight:700">Time Report</h1>
+          <p style="margin:6px 0 0;color:#94a3b8;font-size:14px">${startDate} to ${endDate}</p>
         </div>
-        <div>
-          <div style="font-size: 11px; color: #047857; text-transform: uppercase;">Inside Hours</div>
-          <div style="font-size: 20px; font-weight: bold; color: #047857; margin-top: 2px;">${formatDurationHours(report.regularSeconds)}</div>
+        <div style="padding:24px 32px">
+          <p style="margin:0 0 16px;font-size:14px;color:#475569">Total tracked: <strong>${totalHours} hours</strong> across ${entries.length} entries.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="background:#f8fafc">
+                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600">Date</th>
+                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600">Employee</th>
+                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600">Project</th>
+                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600">Client</th>
+                <th style="padding:10px 12px;text-align:right;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600">Duration</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
         </div>
-        <div>
-          <div style="font-size: 11px; color: #b45309; text-transform: uppercase;">Outside Hours</div>
-          <div style="font-size: 20px; font-weight: bold; color: #b45309; margin-top: 2px;">${formatDurationHours(report.outsideHoursSeconds)}</div>
+        <div style="padding:16px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8">
+          Sent automatically by EL App • ${new Date().toLocaleString()}
         </div>
       </div>
-
-      <h3 style="font-size: 15px; margin-top: 20px; color: #0f172a;">👥 Employee Hours Breakdown</h3>
-      <table style="width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-        <thead>
-          <tr style="background: #f8fafc; text-align: left; border-bottom: 1px solid #e5e7eb;">
-            <th style="padding: 10px 14px;">Employee</th>
-            <th style="padding: 10px 14px; text-align: center;">Inside Hours</th>
-            <th style="padding: 10px 14px; text-align: center;">Outside Hours</th>
-            <th style="padding: 10px 14px; text-align: right;">Total Hours</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${employeeRows || '<tr><td colspan="4" style="padding: 16px; text-align: center; color: #6b7280;">No time entries in this range.</td></tr>'}
-        </tbody>
-      </table>
-      
-      <p style="margin-top: 24px; font-size: 11px; color: #9ca3af; text-align: center;">
-        Report generated and sent from EL App — Employee Time Tracking System.
-      </p>
-    </div>
+    </body>
+    </html>
   `;
+}
 
-  const results: Array<{ recipient: string; status: string; logId: string; error: string | null }> = [];
-  for (const r of recipientList) {
-    const log = await sendEmailNotification({
-      to: r,
-      subject: `[EL App] Activity Report (${startDate} to ${endDate})`,
-      html,
-      type: 'MANUAL_REPORT',
-    });
-    results.push({
-      recipient: r,
-      status: log.status,
-      logId: log.id,
-      error: log.error,
-    });
+function formatSecondsToHHMM(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+export function getZonedParts(date: Date, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    weekday: 'short',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const partMap: Record<string, string> = {};
+  for (const p of parts) {
+    partMap[p.type] = p.value;
   }
-
-  const sentCount = results.filter((r) => r.status === 'SENT' || r.status === 'SIMULATED').length;
-  const failedCount = results.filter((r) => r.status === 'FAILED').length;
-  const firstError = results.find((r) => r.error)?.error || null;
-
   return {
-    success: sentCount > 0,
-    sentCount,
-    failedCount,
-    recipients: recipientList,
-    results,
-    report,
-    error: sentCount === 0 && firstError ? firstError : undefined,
+    dateStr: `${partMap.year}-${partMap.month}-${partMap.day}`,
+    hour: parseInt(partMap.hour || '0', 10),
+    minute: parseInt(partMap.minute || '0', 10),
+    dayOfWeek: (partMap.weekday || '').toUpperCase(),
+    dayOfMonth: parseInt(partMap.day || '1', 10),
+    year: partMap.year || String(date.getFullYear()),
+    month: partMap.month || '01',
   };
 }
 
+function getWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
 /**
- * Background worker to check and dispatch scheduled reports (Daily, Weekly, Monthly)
- * without duplicate scheduled emails.
+ * Evaluates the automated email schedule and dispatches the corresponding report
+ * if the scheduled time has arrived and hasn't already been delivered for this period.
  */
-export async function processScheduledEmailDispatch(): Promise<{ dispatched: boolean; type?: string; reason?: string }> {
-  const settings = await prisma.emailScheduleSetting.findUnique({
+export async function processScheduledEmailDispatch(options?: {
+  force?: boolean;
+}): Promise<{
+  dispatched: boolean;
+  type?: string;
+  reason?: string;
+  recipients?: string[];
+  sentCount?: number;
+  failedCount?: number;
+  error?: string;
+}> {
+  const setting = await prisma.emailScheduleSetting.findFirst({
     where: { id: 'default-email-setting' },
   });
 
-  if (!settings || !settings.enabled) {
-    return { dispatched: false, reason: 'Email settings disabled' };
+  if (!setting || (!setting.enabled && !options?.force)) {
+    return { dispatched: false, reason: 'Automatic email reporting is disabled in settings.' };
   }
 
-  const tz = settings.timezone || 'Asia/Kolkata';
+  const tz = setting.timezone || 'Asia/Kolkata';
   const now = new Date();
-  const scheduleType = (settings.scheduleType || 'DAILY').toUpperCase();
-  const scheduleTime = settings.scheduleTime || settings.dailyTime || '18:00';
+  const zoned = getZonedParts(now, tz);
+  const curTotalMin = zoned.hour * 60 + zoned.minute;
 
-  const [targetH, targetM] = scheduleTime.split(':').map(Number);
-  const currentZonedTime = toZonedTime(now, tz);
-  const curH = currentZonedTime.getHours();
-  const curM = currentZonedTime.getMinutes();
-
-  // Check if current time is within 15 min window of scheduleTime
-  const curTotalMin = curH * 60 + curM;
-  const targetTotalMin = targetH * 60 + targetM;
-  if (Math.abs(curTotalMin - targetTotalMin) > 15) {
-    return { dispatched: false, reason: 'Not schedule time' };
-  }
-
-  const dateStr = formatInTimeZone(now, tz, 'yyyy-MM-dd');
-  const dayOfWeek = formatInTimeZone(now, tz, 'EEE').toUpperCase();
-  const dayOfMonth = currentZonedTime.getDate();
+  const scheduleType = (setting.scheduleType || 'DAILY').toUpperCase();
+  let isDue = Boolean(options?.force);
+  let key = '';
+  let startDate = zoned.dateStr;
+  let endDate = zoned.dateStr;
 
   if (scheduleType === 'DAILY') {
-    const key = `DAILY_${dateStr}`;
-    if (settings.lastSentKey === key) {
-      return { dispatched: false, reason: 'Already sent today' };
+    const timeStr = setting.dailyTime || setting.scheduleTime || '18:00';
+    const [targetH, targetM] = timeStr.split(':').map(Number);
+    const targetTotalMin = (targetH || 0) * 60 + (targetM || 0);
+
+    key = `DAILY_${zoned.dateStr}`;
+    if (!options?.force) {
+      if (setting.lastSentKey === key) {
+        return { dispatched: false, reason: `Daily report already dispatched for today (${zoned.dateStr}).` };
+      }
+      if (curTotalMin < targetTotalMin) {
+        return {
+          dispatched: false,
+          reason: `Current time (${String(zoned.hour).padStart(2, '0')}:${String(zoned.minute).padStart(2, '0')}) is before scheduled daily time (${timeStr}).`,
+        };
+      }
     }
-    await prisma.emailScheduleSetting.update({
-      where: { id: settings.id },
-      data: { lastSentKey: key },
-    });
-    await sendEodReportEmail();
-    return { dispatched: true, type: 'DAILY' };
+    isDue = true;
+    startDate = zoned.dateStr;
+    endDate = zoned.dateStr;
   } else if (scheduleType === 'WEEKLY') {
-    const targetWeeklyDay = (settings.weeklyDay || 'FRI').toUpperCase();
-    if (dayOfWeek !== targetWeeklyDay) {
-      return { dispatched: false, reason: `Today is ${dayOfWeek}, weekly schedule is ${targetWeeklyDay}` };
+    const targetDay = (setting.weeklyDay || 'FRI').toUpperCase();
+    const timeStr = setting.weeklyTime || setting.scheduleTime || '18:00';
+    const [targetH, targetM] = timeStr.split(':').map(Number);
+    const targetTotalMin = (targetH || 0) * 60 + (targetM || 0);
+
+    const weekNumber = getWeekNumber(now);
+    key = `WEEKLY_${zoned.year}-W${weekNumber}`;
+
+    if (!options?.force) {
+      if (setting.lastSentKey === key) {
+        return { dispatched: false, reason: `Weekly report already dispatched for week ${key}.` };
+      }
+      if (zoned.dayOfWeek !== targetDay) {
+        return { dispatched: false, reason: `Today is ${zoned.dayOfWeek}, weekly report scheduled for ${targetDay}.` };
+      }
+      if (curTotalMin < targetTotalMin) {
+        return {
+          dispatched: false,
+          reason: `Current time (${String(zoned.hour).padStart(2, '0')}:${String(zoned.minute).padStart(2, '0')}) is before scheduled time (${timeStr}).`,
+        };
+      }
     }
-    const weekKey = `WEEKLY_${formatInTimeZone(now, tz, 'yyyy-ww')}`;
-    if (settings.lastSentKey === weekKey) {
-      return { dispatched: false, reason: 'Already sent this week' };
-    }
-    await prisma.emailScheduleSetting.update({
-      where: { id: settings.id },
-      data: { lastSentKey: weekKey },
-    });
-    await sendWeeklySummaryEmail();
-    return { dispatched: true, type: 'WEEKLY' };
+    isDue = true;
+    const past7 = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const pastZoned = getZonedParts(past7, tz);
+    startDate = pastZoned.dateStr;
+    endDate = zoned.dateStr;
   } else if (scheduleType === 'MONTHLY') {
-    const targetMonthlyDay = settings.monthlyDay || 1;
-    if (dayOfMonth !== targetMonthlyDay) {
-      return { dispatched: false, reason: `Today is day ${dayOfMonth}, monthly schedule is day ${targetMonthlyDay}` };
+    const targetDay = setting.monthlyDay || 1;
+    const timeStr = setting.monthlyTime || setting.scheduleTime || '18:00';
+    const [targetH, targetM] = timeStr.split(':').map(Number);
+    const targetTotalMin = (targetH || 0) * 60 + (targetM || 0);
+
+    key = `MONTHLY_${zoned.year}-${zoned.month}`;
+    if (!options?.force) {
+      if (setting.lastSentKey === key) {
+        return { dispatched: false, reason: `Monthly report already dispatched for month ${key}.` };
+      }
+      if (zoned.dayOfMonth !== targetDay) {
+        return { dispatched: false, reason: `Today is day ${zoned.dayOfMonth}, monthly report scheduled for day ${targetDay}.` };
+      }
+      if (curTotalMin < targetTotalMin) {
+        return {
+          dispatched: false,
+          reason: `Current time (${String(zoned.hour).padStart(2, '0')}:${String(zoned.minute).padStart(2, '0')}) is before scheduled time (${timeStr}).`,
+        };
+      }
     }
-    const monthKey = `MONTHLY_${formatInTimeZone(now, tz, 'yyyy-MM')}`;
-    if (settings.lastSentKey === monthKey) {
-      return { dispatched: false, reason: 'Already sent this month' };
-    }
-    await prisma.emailScheduleSetting.update({
-      where: { id: settings.id },
-      data: { lastSentKey: monthKey },
-    });
-    await sendMonthlySummaryEmail();
-    return { dispatched: true, type: 'MONTHLY' };
+    isDue = true;
+    startDate = `${zoned.year}-${zoned.month}-01`;
+    endDate = zoned.dateStr;
   }
 
-  return { dispatched: false };
+  if (!isDue) {
+    return { dispatched: false, reason: 'Conditions for scheduled dispatch not met.' };
+  }
+
+  // Execute dispatch
+  const result = await sendCustomDateRangeReportEmail({
+    startDate,
+    endDate,
+  });
+
+  if (result.success && result.sentCount > 0) {
+    // Only lock lastSentKey after successful delivery!
+    await prisma.emailScheduleSetting.update({
+      where: { id: setting.id },
+      data: { lastSentKey: key },
+    });
+
+    return {
+      dispatched: true,
+      type: scheduleType,
+      recipients: result.recipients,
+      sentCount: result.sentCount,
+      failedCount: result.failedCount,
+    };
+  }
+
+  return {
+    dispatched: false,
+    type: scheduleType,
+    reason: result.error || 'Failed to deliver scheduled email report.',
+    error: result.error,
+    recipients: result.recipients,
+    sentCount: result.sentCount,
+    failedCount: result.failedCount,
+  };
 }
 

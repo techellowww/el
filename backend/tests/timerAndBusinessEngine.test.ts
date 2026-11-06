@@ -272,6 +272,12 @@ async function runTestSuite() {
 
     await prisma.timeEntry.delete({ where: { id: mockOutsideEntry.id } });
 
+    await prisma.screenshotSetting.upsert({
+      where: { id: 'default-screenshot-setting' },
+      update: { enabled: true, intervalMinutes: 15 },
+      create: { id: 'default-screenshot-setting', enabled: true, intervalMinutes: 15 },
+    });
+
     // Test 14: Automated screenshot capture records milestone 0 initial session snapshot for running timer
     const testTimerEntry = await prisma.timeEntry.create({
       data: {

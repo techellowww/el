@@ -1,33 +1,23 @@
 import express from 'express';
+import http from 'http';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
+import { prisma } from './lib/prisma';
+import { initChatSocketServer, broadcastChatMessage } from './chat/socketServer';
+import { initBackgroundScheduler } from './lib/cronScheduler';
 
 dotenv.config();
 
-import authRoutes from './routes/auth.routes';
-import timerRoutes from './routes/timer.routes';
-import projectsRoutes from './routes/projects.routes';
-import timeEntriesRoutes from './routes/timeEntries.routes';
-import correctionsRoutes from './routes/corrections.routes';
-import employeesRoutes from './routes/employees.routes';
-import dashboardRoutes from './routes/dashboard.routes';
-import reportsRoutes from './routes/reports.routes';
-import settingsRoutes from './routes/settings.routes';
-import screenshotsRoutes from './routes/screenshots.routes';
-import mailRoutes from './routes/mail.routes';
-import officeTimingsRoutes from './routes/officeTimings.routes';
-import { initBackgroundScheduler } from './lib/cronScheduler';
-
 const app = express();
-const PORT = process.env.PORT || 5000;
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
+const CHAT_PORT = process.env.CHAT_SERVER_PORT || process.env.PORT || 5001;
+const CLIENT_URL = process.env.CLIENT_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 const allowedOrigins = [
   CLIENT_URL,
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-].filter(Boolean);
+].filter(Boolean) as string[];
 
 app.use(
   cors({
@@ -51,38 +41,58 @@ app.use(
 );
 
 app.use(cookieParser());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/timer', timerRoutes);
-app.use('/api/projects', projectsRoutes);
-app.use('/api/time-entries', timeEntriesRoutes);
-app.use('/api/corrections', correctionsRoutes);
-app.use('/api/admin/employees', employeesRoutes);
-app.use('/api/admin/dashboard', dashboardRoutes);
-app.use('/api/admin', settingsRoutes); // for /api/admin/audit-logs
-app.use('/api/reports', reportsRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/mail', mailRoutes);
-app.use('/api/office-timings', officeTimingsRoutes);
-app.use('/api/screenshots', screenshotsRoutes);
-
-// Health check endpoint
-app.get('/health', (req: express.Request, res: express.Response) => {
-  res.json({
-    status: 'ok',
-    service: 'EL App Backend API',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-  });
+// Internal broadcast endpoint for client portal messages
+app.post('/api/internal/chat/broadcast', (req: express.Request, res: express.Response) => {
+  try {
+    const { accountId, conversationId, message } = req.body || {};
+    if (!accountId || !conversationId || !message) {
+      return res.status(400).json({ error: 'Missing accountId, conversationId, or message' });
+    }
+    const sent = broadcastChatMessage(accountId, conversationId, message);
+    res.json({ success: sent });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Start Background Worker & Scheduler
+// Health Check Endpoint
+app.get('/health', async (req: express.Request, res: express.Response) => {
+  try {
+    // Quick DB ping
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({
+      status: 'ok',
+      service: 'EL App Real-time Socket.IO Chat & Background Scheduler',
+      port: Number(CHAT_PORT),
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      database: 'connected',
+    });
+  } catch (dbErr: any) {
+    res.status(500).json({
+      status: 'error',
+      service: 'EL App Real-time Socket.IO Chat & Background Scheduler',
+      error: 'Database connection failed',
+      details: dbErr.message,
+    });
+  }
+});
+
+const httpServer = http.createServer(app);
+
+// Initialize Dedicated Socket.io Real-time Chat Server
+initChatSocketServer(httpServer);
+
+// Initialize Background Worker & Scheduler
 initBackgroundScheduler();
 
-app.listen(PORT, () => {
-  console.log(`🚀 EL App Backend Server running on http://localhost:${PORT}`);
-  console.log(`📡 CORS configured for origin: ${CLIENT_URL}`);
+httpServer.listen(CHAT_PORT, () => {
+  console.log(`🚀 EL App Real-time Chat Server running on http://localhost:${CHAT_PORT}`);
+  console.log(`💬 Socket.IO chat endpoint listening on port ${CHAT_PORT}`);
+  console.log(`⏰ Background scheduler active for office cutoff, screenshots, and automated email reports.`);
 });
+
+export default httpServer;

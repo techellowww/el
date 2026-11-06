@@ -1,25 +1,311 @@
 @import "tailwindcss";
 
+@theme {
+  --color-primary: #2563EB;
+  --color-primary-hover: #1D4ED8;
+  --color-primary-subtle: #EFF6FF;
+
+  --color-navy: #0F172A;
+  --color-navy-hover: #1E293B;
+  --color-navy-surface: #1E293B;
+
+  --color-app-background: #F5F7FB;
+  --color-app-surface: #FFFFFF;
+  --color-border: #E2E8F0;
+
+  --color-text-primary: #111827;
+  --color-text-secondary: #64748B;
+
+  --color-success: #16A34A;
+  --color-success-subtle: #F0FDF4;
+  --color-warning: #D97706;
+  --color-warning-subtle: #FFFBEB;
+  --color-error: #DC2626;
+  --color-error-subtle: #FEF2F2;
+
+  --font-sans: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --radius-card: 12px;
+}
+
 @layer base {
+  html {
+    /* Responsive root font-size: scaled down on smaller devices */
+    font-size: 13px; /* Mobile (<640px) */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  @media (min-width: 640px) {
+    html {
+      font-size: 13.5px; /* Small tablet / large phone (sm: 640px) */
+    }
+  }
+
+  @media (min-width: 768px) {
+    html {
+      font-size: 14px; /* Tablet (md: 768px) */
+    }
+  }
+
+  @media (min-width: 1024px) {
+    html {
+      font-size: 15px; /* Laptops (lg: 1024px) */
+    }
+  }
+
+  @media (min-width: 1280px) {
+    html {
+      font-size: 16px; /* Enterprise desktop (xl: 1280px+) */
+    }
+  }
+
   * {
-    border-color: rgba(255, 255, 255, 0.08);
+    border-color: #E2E8F0;
+  }
+
+  body {
+    background-color: #F5F7FB;
+    color: #111827;
+    font-family: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+
+  /* Form controls base typography and text color */
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    color: #000000 !important;
   }
 }
 
-/* Custom scrollbars */
+/* Typography Scale Specifications (Responsive by device) */
+.page-heading {
+  font-size: 1.125rem; /* ~14.6px on mobile */
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: #111827;
+}
+@media (min-width: 640px) {
+  .page-heading {
+    font-size: 1.25rem; /* ~16.8px on small tablet */
+  }
+}
+@media (min-width: 768px) {
+  .page-heading {
+    font-size: 1.375rem; /* ~18.5px on tablet */
+  }
+}
+@media (min-width: 1024px) {
+  .page-heading {
+    font-size: 1.5rem; /* ~22.5px on desktop */
+  }
+}
+@media (min-width: 1280px) {
+  .page-heading {
+    font-size: 1.6875rem; /* ~27px on large desktop */
+  }
+}
+
+.section-heading {
+  font-size: 0.875rem; /* ~11.4px on mobile */
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+  color: #111827;
+}
+@media (min-width: 640px) {
+  .section-heading {
+    font-size: 0.9375rem; /* ~12.6px on small tablet */
+  }
+}
+@media (min-width: 768px) {
+  .section-heading {
+    font-size: 1.0rem; /* ~14px on tablet */
+  }
+}
+@media (min-width: 1024px) {
+  .section-heading {
+    font-size: 1.125rem; /* ~17px on desktop */
+  }
+}
+@media (min-width: 1280px) {
+  .section-heading {
+    font-size: 1.25rem; /* 20px on large desktop */
+  }
+}
+
+.card-title {
+  font-size: 0.8125rem; /* ~10.5px on mobile */
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: #111827;
+}
+@media (min-width: 640px) {
+  .card-title {
+    font-size: 0.875rem; /* ~11.8px on tablet */
+  }
+}
+@media (min-width: 1024px) {
+  .card-title {
+    font-size: 0.9375rem; /* ~14px on desktop */
+  }
+}
+@media (min-width: 1280px) {
+  .card-title {
+    font-size: 1rem; /* 16px on large desktop */
+  }
+}
+
+.body-text {
+  font-size: 0.75rem; /* ~9.75px on mobile */
+  font-weight: 400;
+  line-height: 1.5;
+  color: #64748B;
+}
+@media (min-width: 640px) {
+  .body-text {
+    font-size: 0.8125rem; /* ~11px on tablet */
+  }
+}
+@media (min-width: 1024px) {
+  .body-text {
+    font-size: 0.875rem; /* 13-14px on desktop */
+  }
+}
+
+.btn-text,
+.nav-text {
+  font-size: 0.75rem; /* ~9.75px on mobile */
+  font-weight: 500;
+  line-height: 1.4;
+}
+@media (min-width: 640px) {
+  .btn-text,
+  .nav-text {
+    font-size: 0.8125rem; /* ~11px on tablet */
+  }
+}
+@media (min-width: 1024px) {
+  .btn-text,
+  .nav-text {
+    font-size: 0.875rem; /* 13-14px on desktop */
+  }
+}
+
+.table-cell-text {
+  font-size: 0.75rem; /* ~9.75px on mobile */
+  font-weight: 400;
+  line-height: 1.45;
+  color: #111827;
+}
+@media (min-width: 640px) {
+  .table-cell-text {
+    font-size: 0.8125rem; /* ~11px on tablet */
+  }
+}
+@media (min-width: 1024px) {
+  .table-cell-text {
+    font-size: 0.875rem; /* 13.5px - 14px on desktop */
+  }
+}
+
+.table-header-text {
+  font-size: 0.6875rem; /* ~8.9px on mobile */
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #64748B;
+}
+@media (min-width: 640px) {
+  .table-header-text {
+    font-size: 0.75rem; /* ~10.5px on tablet */
+  }
+}
+@media (min-width: 1024px) {
+  .table-header-text {
+    font-size: 0.8125rem; /* 12.5px - 13px on desktop */
+  }
+}
+
+.label-text {
+  font-size: 0.75rem; /* ~9.75px on mobile */
+  font-weight: 400;
+  line-height: 1.4;
+  color: #111827;
+}
+@media (min-width: 640px) {
+  .label-text {
+    font-size: 0.78125rem; /* ~11px on tablet */
+  }
+}
+@media (min-width: 1024px) {
+  .label-text {
+    font-size: 0.8125rem; /* 12.5px on desktop */
+  }
+}
+
+.helper-text {
+  font-size: 0.6875rem; /* ~8.9px on mobile */
+  font-weight: 400;
+  line-height: 1.4;
+  color: #64748B;
+}
+@media (min-width: 640px) {
+  .helper-text {
+    font-size: 0.75rem; /* ~10.5px on tablet */
+  }
+}
+@media (min-width: 1024px) {
+  .helper-text {
+    font-size: 0.78125rem; /* 12.5px on desktop */
+  }
+}
+
+/* Enforce pure black text on all typed input, textarea, and select elements */
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select,
+input.body-text,
+textarea.body-text,
+select.body-text {
+  color: #000000 !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"])::placeholder,
+textarea::placeholder {
+  color: #94A3B8 !important;
+}
+
+select option {
+  color: #000000;
+  background-color: #FFFFFF;
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  color: #64748B !important;
+  background-color: #F8FAFC !important;
+  cursor: not-allowed;
+}
+
+/* Custom Enterprise Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: #F1F5F9;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.3);
+  background: #CBD5E1;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.5);
+  background: #94A3B8;
 }
 
 /* Hide Next.js Development Indicator badge */
@@ -32,27 +318,36 @@ nextjs-portal,
 }
 
 @layer utilities {
-  .glass-card {
-    background: rgba(15, 23, 42, 0.75);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+  .card-surface {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
   }
+
+  .glass-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+  }
+
   .glass-card-hover {
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.15s ease-in-out;
   }
   .glass-card-hover:hover {
-    border-color: rgba(255, 255, 255, 0.16);
+    border-color: #CBD5E1;
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
     transform: translateY(-1px);
-    box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.5), 0 0 20px -5px rgba(59, 130, 246, 0.1);
   }
 }
 
 /* Print styling for PDF report printing */
 @media print {
   body {
-    background: #ffffff !important;
+    background: #FFFFFF !important;
     color: #000000 !important;
-    background-color: #ffffff !important;
+    background-color: #FFFFFF !important;
   }
   .no-print {
     display: none !important;
@@ -61,3 +356,11 @@ nextjs-portal,
     display: block !important;
   }
 }
+
+/* Ensure all inputs and textareas always have crisp black text */
+input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+textarea,
+select {
+  color: #000000 !important;
+}
+

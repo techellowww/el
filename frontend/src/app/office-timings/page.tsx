@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { AppShell } from '@/components/AppShell';
 import { useAuthStore, useTimerStore } from '@/lib/store';
 import {
   Building2,
@@ -9,15 +8,17 @@ import {
   Calendar,
   Globe,
   ShieldCheck,
-  PlayCircle,
   AlertCircle,
   CheckCircle2,
   Copy,
   Sparkles,
   Save,
   Check,
+  X,
+  Loader2,
+  Activity,
 } from 'lucide-react';
-import { TimePicker12h, format24hTo12h } from '@/components/TimePicker12h';
+import { format24hTo12h } from '@/components/TimePicker12h';
 
 interface DaySchedule {
   start: string;
@@ -79,7 +80,6 @@ export default function OfficeTimingsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isTriggering, setIsTriggering] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -116,7 +116,6 @@ export default function OfficeTimingsPage() {
               // fallback
             }
           } else {
-            // Populate defaults using global opening and closing time if dayTimings wasn't initialized yet
             const defaultStart = data.schedule.openingTime || '09:00';
             const defaultEnd = data.schedule.closingTime || '18:00';
             setDaySchedules({
@@ -215,120 +214,133 @@ export default function OfficeTimingsPage() {
     }
   };
 
-  const handleTriggerCutoffNow = async () => {
-    setIsTriggering(true);
-    setMessage(null);
-
-    try {
-      const res = await fetch('/api/office-timings/cutoff-trigger', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setMessage({ type: 'success', text: data.message });
-        syncActiveTimer();
-      } else {
-        setMessage({ type: 'error', text: data.error || 'Cutoff evaluation failed' });
-      }
-    } catch {
-      setMessage({ type: 'error', text: 'Network error evaluating cutoffs.' });
-    } finally {
-      setIsTriggering(false);
-    }
-  };
-
   return (
-    <AppShell>
-      <div className="max-w-5xl space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-800">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
-              <Building2 className="w-6 h-6 text-blue-500" />
-              <span>Office Timings</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Configure day-wise office start and end times for Monday through Sunday, and enable automatic timer stopping.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-400 font-mono flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-blue-400" /> {timezone}
-            </span>
-          </div>
+    <div className="space-y-6 animate-in fade-in duration-300">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="page-heading text-text-primary flex items-center gap-2">
+            <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" />
+            <span>Office Timings</span>
+          </h1>
+          <p className="helper-text text-text-secondary mt-1">
+            {isAdmin
+              ? 'Configure day-wise office operating hours, organization timezone, and automatic timer cutoff enforcement.'
+              : 'Standard agency operational schedules and active daily working windows.'}
+          </p>
         </div>
 
-        {/* Alert / Status Banner */}
-        {message && (
-          <div
-            className={`p-4 rounded-xl border flex items-center gap-3 text-xs sm:text-sm leading-relaxed transition animate-in fade-in ${
-              message.type === 'success'
-                ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200'
-                : 'bg-red-950/40 border-red-800/60 text-red-200'
-            }`}
-          >
-            {message.type === 'success' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-            ) : (
-              <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
-            )}
-            <span>{message.text}</span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto shrink-0">
+          <span className="px-3 py-1.5 rounded-xl bg-white border border-border shadow-xs text-xs font-mono text-text-secondary flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-primary" />
+            <span>{timezone}</span>
+          </span>
 
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* ========================================================================= */}
-          {/* DAY-WISE OFFICE TIMINGS (MONDAY THROUGH SUNDAY)                          */}
-          {/* ========================================================================= */}
-          <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-5 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-800">
+          {isAdmin && (
+            <button
+              type="button"
+              id="save-office-timings-btn"
+              data-testid="save-office-timings-btn"
+              onClick={() => handleSave()}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white btn-text shadow-sm transition cursor-pointer flex items-center gap-2 disabled:opacity-50"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Save Timings</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Status Banner */}
+      {message && (
+        <div
+          className={`p-4 rounded-xl border flex items-center justify-between gap-3 helper-text font-medium animate-in fade-in ${
+            message.type === 'success'
+              ? 'bg-green-50 border-green-200 text-success'
+              : 'bg-red-50 border-red-200 text-error'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            {message.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-error shrink-0" />
+            )}
+            <span className="truncate">{message.text}</span>
+          </div>
+          <button
+            onClick={() => setMessage(null)}
+            className="text-slate-400 hover:text-slate-600 transition p-1 shrink-0 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-6">
+        {/* CARD 1: DAY-WISE OFFICE TIMINGS */}
+        <div className="rounded-card bg-white border border-border p-4 sm:p-6 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-border">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-primary-subtle text-primary border border-blue-200 flex items-center justify-center shrink-0">
+                <Clock className="w-4 h-4" />
+              </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-blue-400" />
-                    <span>Day-Wise Office Operating Hours</span>
-                  </h3>
+                  <h2 className="card-title text-text-primary">Day-Wise Office Operating Hours</h2>
                   {!isAdmin && (
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-slate-700">
+                    <span className="label-text font-semibold px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-border">
                       View-Only
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="helper-text text-text-secondary mt-0.5">
                   {isAdmin
-                    ? 'Set separate start time and end time for each individual day of the week.'
+                    ? 'Set separate opening and closing times for each individual day of the week.'
                     : 'Standard office operational schedules configured by administrators.'}
                 </p>
               </div>
-
-              {/* Quick Preset Copy Actions (Admin Only) */}
-              {isAdmin && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCopyMonToWeekdays}
-                    className="py-1.5 px-3 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 font-medium transition cursor-pointer flex items-center gap-1.5"
-                    title="Copy Monday's start and end times to Tue, Wed, Thu, Fri"
-                  >
-                    <Copy className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Copy Mon to Weekdays</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCopyMonToAllDays}
-                    className="py-1.5 px-3 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 font-medium transition cursor-pointer flex items-center gap-1.5"
-                    title="Copy Monday's start and end times to all 7 days"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Copy Mon to All Days</span>
-                  </button>
-                </div>
-              )}
             </div>
 
-            {/* 7 Days Table / Grid */}
+            {/* Quick Preset Copy Actions (Admin Only) */}
+            {isAdmin && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyMonToWeekdays}
+                  className="py-1.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 border border-border text-xs text-text-primary font-medium transition cursor-pointer flex items-center gap-1.5"
+                  title="Copy Monday's start and end times to Tue, Wed, Thu, Fri"
+                >
+                  <Copy className="w-3.5 h-3.5 text-primary" />
+                  <span>Copy Mon to Weekdays</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyMonToAllDays}
+                  className="py-1.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 border border-border text-xs text-text-primary font-medium transition cursor-pointer flex items-center gap-1.5"
+                  title="Copy Monday's start and end times to all 7 days"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-warning" />
+                  <span>Copy Mon to All Days</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 7 Days Table / List */}
+          {isLoading ? (
+            <div className="p-12 text-center helper-text text-text-secondary">Loading office timings...</div>
+          ) : (
             <div className="space-y-3">
               {DAYS_META.map((day) => {
                 const schedule = daySchedules[day.key];
@@ -339,35 +351,35 @@ export default function OfficeTimingsPage() {
                     key={day.key}
                     id={`day-timing-${day.key.toLowerCase()}`}
                     data-testid={`day-timing-${day.key.toLowerCase()}`}
-                    className={`p-4 rounded-xl border transition-all flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${
+                    className={`p-3.5 sm:p-4 rounded-xl border transition-all flex flex-col md:flex-row md:items-center md:justify-between gap-3.5 sm:gap-4 ${
                       day.isWeekend
-                        ? 'bg-slate-950/40 border-slate-800/60'
-                        : 'bg-slate-950/80 border-slate-800'
+                        ? 'bg-slate-50/70 border-border hover:border-slate-300'
+                        : 'bg-white border-border hover:border-slate-300'
                     }`}
                   >
-                    {/* Day Label */}
+                    {/* Day Label & Window */}
                     <div className="w-36 shrink-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white text-sm">{day.label}</span>
+                        <span className="card-title text-text-primary text-sm">{day.label}</span>
                         {day.isWeekend && (
-                          <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                          <span className="text-[10px] font-semibold text-text-secondary bg-slate-100 px-1.5 py-0.5 rounded border border-border">
                             Weekend
                           </span>
                         )}
                       </div>
-                      <span className="text-[11px] text-slate-400 font-mono mt-0.5 block">
+                      <span className="helper-text text-text-secondary font-mono mt-0.5 block">
                         Window: {windowStr}
                       </span>
                     </div>
 
                     {/* Start Time and End Time */}
                     {isAdmin ? (
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         {/* Start Time */}
                         <div className="flex items-center gap-2">
                           <label
                             htmlFor={`start-time-${day.key}`}
-                            className="text-xs text-slate-400 w-20 shrink-0 font-medium"
+                            className="label-text text-text-secondary w-20 shrink-0 font-medium"
                           >
                             Start Time:
                           </label>
@@ -377,9 +389,9 @@ export default function OfficeTimingsPage() {
                             type="time"
                             value={schedule.start}
                             onChange={(e) => handleDayTimeChange(day.key, 'start', e.target.value)}
-                            className="py-2 px-3 bg-slate-900 border border-slate-700/80 rounded-xl text-xs sm:text-sm text-white font-mono focus:outline-none focus:border-blue-500 w-full"
+                            className="py-2 px-3 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary w-full"
                           />
-                          <span className="text-xs text-slate-500 font-mono shrink-0 w-16 text-right">
+                          <span className="text-xs text-text-secondary font-mono shrink-0 w-20 text-right">
                             {format24hTo12h(schedule.start)}
                           </span>
                         </div>
@@ -388,7 +400,7 @@ export default function OfficeTimingsPage() {
                         <div className="flex items-center gap-2">
                           <label
                             htmlFor={`end-time-${day.key}`}
-                            className="text-xs text-slate-400 w-20 shrink-0 font-medium"
+                            className="label-text text-text-secondary w-20 shrink-0 font-medium"
                           >
                             End Time:
                           </label>
@@ -398,28 +410,28 @@ export default function OfficeTimingsPage() {
                             type="time"
                             value={schedule.end}
                             onChange={(e) => handleDayTimeChange(day.key, 'end', e.target.value)}
-                            className="py-2 px-3 bg-slate-900 border border-slate-700/80 rounded-xl text-xs sm:text-sm text-white font-mono focus:outline-none focus:border-blue-500 w-full"
+                            className="py-2 px-3 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary w-full"
                           />
-                          <span className="text-xs text-slate-500 font-mono shrink-0 w-16 text-right">
+                          <span className="text-xs text-text-secondary font-mono shrink-0 w-20 text-right">
                             {format24hTo12h(schedule.end)}
                           </span>
                         </div>
                       </div>
                     ) : (
                       /* View-Only Mode for Employees */
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-400 w-20 shrink-0 font-medium">Start Time:</span>
-                          <div className="py-2 px-3 bg-slate-900/60 border border-slate-800/80 rounded-xl text-xs sm:text-sm text-slate-200 font-mono w-full flex items-center justify-between">
+                          <span className="label-text text-text-secondary w-20 shrink-0 font-medium">Start:</span>
+                          <div className="py-2 px-3 bg-slate-50 border border-border rounded-xl text-xs sm:text-sm text-text-primary font-mono w-full flex items-center justify-between">
                             <span>{schedule.start}</span>
-                            <span className="text-xs text-slate-400 font-mono">({format24hTo12h(schedule.start)})</span>
+                            <span className="text-xs text-text-secondary font-mono">({format24hTo12h(schedule.start)})</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-400 w-20 shrink-0 font-medium">End Time:</span>
-                          <div className="py-2 px-3 bg-slate-900/60 border border-slate-800/80 rounded-xl text-xs sm:text-sm text-slate-200 font-mono w-full flex items-center justify-between">
+                          <span className="label-text text-text-secondary w-20 shrink-0 font-medium">End:</span>
+                          <div className="py-2 px-3 bg-slate-50 border border-border rounded-xl text-xs sm:text-sm text-text-primary font-mono w-full flex items-center justify-between">
                             <span>{schedule.end}</span>
-                            <span className="text-xs text-slate-400 font-mono">({format24hTo12h(schedule.end)})</span>
+                            <span className="text-xs text-text-secondary font-mono">({format24hTo12h(schedule.end)})</span>
                           </div>
                         </div>
                       </div>
@@ -428,109 +440,131 @@ export default function OfficeTimingsPage() {
                 );
               })}
             </div>
+          )}
+        </div>
 
-            {/* Card 1 footer (if non-admin, no extra button; if admin, buttons are in action row below) */}
-          </div>
+        {/* CARD 2: AUTOMATIC TIMER STOP SETTINGS (ADMIN ONLY) */}
+        {isAdmin && (
+          <div className="rounded-card bg-white border border-border p-4 sm:p-6 shadow-sm space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-border">
+              <div className="w-8 h-8 rounded-lg bg-green-50 text-success border border-green-200 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="card-title text-text-primary">Automatic Timer Stop Settings</h2>
+                <p className="helper-text text-text-secondary">
+                  Enforce strict cutoff boundaries so employee timers never run unmonitored overnight.
+                </p>
+              </div>
+            </div>
 
-          {/* ========================================================================= */}
-          {/* CARD 2: AUTOMATIC TIMER STOP CHECKBOX & ENFORCEMENT (ADMIN ONLY)          */}
-          {/* ========================================================================= */}
-          {isAdmin && (
-            <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4 shadow-sm">
-              <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Automatic Timer Stop Settings</span>
-              </h3>
-
-              {/* Checkbox */}
-              <div className="flex items-start gap-3.5 p-4 bg-slate-950/80 rounded-xl border border-slate-800">
-                <input
-                  type="checkbox"
-                  id="autoCutoffCheckbox"
-                  data-testid="autoCutoffCheckbox"
-                  checked={autoCutoffEnabled}
-                  onChange={(e) => setAutoCutoffEnabled(e.target.checked)}
-                  className="mt-1 w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0 cursor-pointer accent-blue-600 shrink-0"
-                />
-                <div className="flex-1">
-                  <label htmlFor="autoCutoffCheckbox" className="text-sm font-semibold text-white block cursor-pointer">
-                    Automatically stop the timer when the configured office end time is reached
-                  </label>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    When enabled, any active timer will be automatically stopped exactly at the configured office end time for that day. This prevents timers from running overnight if an employee forgets to stop their timer.
-                  </p>
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-                        autoCutoffEnabled
-                          ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
-                          : 'bg-slate-800 text-slate-400 border-slate-700'
-                      }`}
-                    >
-                      {autoCutoffEnabled ? (
-                        <>
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                          Automatic Stop Active
-                        </>
-                      ) : (
-                        'Automatic Stop Disabled'
-                      )}
-                    </span>
-                  </div>
+            {/* Checkbox Container */}
+            <div className="flex items-start gap-3.5 p-4 bg-slate-50 rounded-xl border border-border">
+              <input
+                type="checkbox"
+                id="autoCutoffCheckbox"
+                data-testid="autoCutoffCheckbox"
+                checked={autoCutoffEnabled}
+                onChange={(e) => setAutoCutoffEnabled(e.target.checked)}
+                className="mt-1 w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary shrink-0"
+              />
+              <div className="flex-1">
+                <label htmlFor="autoCutoffCheckbox" className="card-title text-text-primary block cursor-pointer">
+                  Automatically stop the timer when the configured office end time is reached
+                </label>
+                <p className="helper-text text-text-secondary mt-1 leading-relaxed">
+                  When enabled, active timers started during regular office hours will automatically stop exactly at the configured office end time for that day. After office hours, employees can use the Overtime option to track additional work, which runs until manually stopped.
+                </p>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                      autoCutoffEnabled
+                        ? 'bg-green-50 text-success border-green-200'
+                        : 'bg-slate-100 text-slate-600 border-border'
+                    }`}
+                  >
+                    {autoCutoffEnabled ? (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
+                        Automatic Stop Active
+                      </>
+                    ) : (
+                      'Automatic Stop Disabled'
+                    )}
+                  </span>
                 </div>
               </div>
+            </div>
 
-              {/* Timezone Selection */}
-              <div className="pt-2">
-                <label className="block text-xs font-medium text-slate-300 uppercase tracking-wider mb-1.5">
-                  Organization Timezone
-                </label>
-                <select
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  className="w-full py-2.5 px-3 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:border-blue-500 font-mono"
-                >
-                  <option value="Asia/Kolkata">Asia/Kolkata (IST - UTC+05:30)</option>
-                  <option value="UTC">UTC (Coordinated Universal Time)</option>
-                  <option value="America/New_York">America/New_York (EST / EDT)</option>
-                  <option value="America/Los_Angeles">America/Los_Angeles (PST / PDT)</option>
-                  <option value="Europe/London">Europe/London (GMT / BST)</option>
-                  <option value="Europe/Berlin">Europe/Berlin (CET / CEST)</option>
-                  <option value="Asia/Dubai">Asia/Dubai (GST - UTC+04:00)</option>
-                  <option value="Asia/Singapore">Asia/Singapore (SGT - UTC+08:00)</option>
-                </select>
+            {/* Keyboard & Mouse Inactivity Auto-Cut Container */}
+            <div className="flex items-start gap-3.5 p-4 bg-slate-50 rounded-xl border border-border">
+              <div className="mt-1 w-4 h-4 text-primary flex items-center justify-center shrink-0">
+                <Activity className="w-4 h-4 text-primary" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="card-title text-text-primary block">
+                    Keyboard &amp; Mouse Inactivity Auto-Cut
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-green-50 text-success border-green-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
+                    Active (10-15 Min)
+                  </span>
+                </div>
+                <p className="helper-text text-text-secondary mt-1 leading-relaxed">
+                  Automatically monitors user activity during running timers. If no keyboard or mouse movement is detected for 10 minutes, a warning alert is prompted. If inactivity continues up to 15 minutes, the timer is automatically cut off to prevent unmonitored abandoned sessions.
+                </p>
               </div>
             </div>
-          )}
 
-          {/* Action Buttons (Admin Only) */}
-          {isAdmin && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleTriggerCutoffNow}
-                disabled={isTriggering}
-                className="w-full sm:w-auto py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-amber-300 flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+            {/* Timezone Selection */}
+            <div className="pt-2">
+              <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
+                Organization Timezone
+              </label>
+              <select
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="w-full py-2.5 px-3 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary font-mono cursor-pointer"
               >
-                <PlayCircle className="w-4 h-4" />
-                <span>{isTriggering ? 'Evaluating Office End Time...' : 'Test Auto-Stop Evaluation Now'}</span>
-              </button>
-
-              <button
-                type="button"
-                id="save-office-timings-btn"
-                data-testid="save-office-timings-btn"
-                onClick={() => handleSave()}
-                disabled={isSaving}
-                className="w-full sm:w-auto py-2.5 px-7 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold shadow-lg shadow-blue-600/30 transition cursor-pointer flex items-center justify-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                <span>{isSaving ? 'Saving Timings...' : 'Save Office Timings'}</span>
-              </button>
+                <option value="Asia/Kolkata">Asia/Kolkata (IST - UTC+05:30)</option>
+                <option value="UTC">UTC (Coordinated Universal Time)</option>
+                <option value="America/New_York">America/New_York (EST / EDT)</option>
+                <option value="America/Los_Angeles">America/Los_Angeles (PST / PDT)</option>
+                <option value="Europe/London">Europe/London (GMT / BST)</option>
+                <option value="Europe/Berlin">Europe/Berlin (CET / CEST)</option>
+                <option value="Asia/Dubai">Asia/Dubai (GST - UTC+04:00)</option>
+                <option value="Asia/Singapore">Asia/Singapore (SGT - UTC+08:00)</option>
+              </select>
             </div>
-          )}
-        </form>
-      </div>
-    </AppShell>
+          </div>
+        )}
+
+        {/* Action Buttons (Admin Only) */}
+        {isAdmin && (
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              id="save-office-timings-btn-bottom"
+              onClick={() => handleSave()}
+              disabled={isSaving}
+              className="w-full sm:w-auto py-2.5 px-7 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-50 text-white text-xs sm:text-sm font-semibold shadow-sm transition cursor-pointer flex items-center justify-center gap-2"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving Timings...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Save Office Timings</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </form>
+    </div>
   );
 }

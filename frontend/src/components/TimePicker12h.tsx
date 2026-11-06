@@ -103,11 +103,11 @@ export function TimePicker12h({
     <div className="space-y-1.5" id={id}>
       {label && (
         <div className="flex items-center justify-between">
-          <label className="block text-xs font-medium text-slate-300 uppercase tracking-wider">
+          <label className="block text-xs font-semibold text-text-primary uppercase tracking-wider">
             {label}
           </label>
-          <span className="text-xs font-bold font-mono px-2 py-0.5 rounded-lg bg-blue-950/60 border border-blue-800/40 text-blue-300 flex items-center gap-1">
-            <Clock className="w-3 h-3 text-blue-400" />
+          <span className="text-xs font-bold font-mono px-2 py-0.5 rounded-lg bg-primary-subtle border border-blue-200 text-primary flex items-center gap-1">
+            <Clock className="w-3 h-3 text-primary" />
             {format24hTo12h(value)}
           </span>
         </div>
@@ -121,7 +121,7 @@ export function TimePicker12h({
             value={hour12}
             disabled={disabled}
             onChange={(e) => handleHourChange(Number(e.target.value))}
-            className="w-full py-2.5 px-3 bg-slate-950 border border-slate-800 rounded-xl text-sm font-semibold text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer text-center"
+            className="w-full py-2.5 px-3 bg-white border border-border rounded-xl text-sm font-semibold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center"
             aria-label={`${label || 'Time'} hour`}
           >
             {HOURS.map((h) => (
@@ -130,12 +130,12 @@ export function TimePicker12h({
               </option>
             ))}
           </select>
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 pointer-events-none">
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary pointer-events-none">
             HR
           </span>
         </div>
 
-        <span className="font-bold text-slate-500 text-lg">:</span>
+        <span className="font-bold text-slate-400 text-lg">:</span>
 
         {/* Minute Selector */}
         <div className="relative flex-1">
@@ -147,7 +147,7 @@ export function TimePicker12h({
                 handleMinuteChange(e.target.value);
               }
             }}
-            className="w-full py-2.5 px-3 bg-slate-950 border border-slate-800 rounded-xl text-sm font-semibold text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer text-center"
+            className="w-full py-2.5 px-3 bg-white border border-border rounded-xl text-sm font-semibold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center"
             aria-label={`${label || 'Time'} minute`}
           >
             {MINUTES.map((m) => (
@@ -161,21 +161,21 @@ export function TimePicker12h({
               </option>
             )}
           </select>
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 pointer-events-none">
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary pointer-events-none">
             MIN
           </span>
         </div>
 
         {/* AM / PM Segmented Control */}
-        <div className="flex rounded-xl bg-slate-950 border border-slate-800 p-1 shrink-0 gap-1">
+        <div className="flex rounded-xl bg-slate-100 border border-border p-1 shrink-0 gap-1">
           <button
             type="button"
             disabled={disabled}
             onClick={() => handlePeriodChange('AM')}
             className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               period === 'AM'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-950/40'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-white text-warning border border-amber-200 shadow-xs'
+                : 'text-text-secondary hover:text-text-primary'
             }`}
           >
             AM
@@ -186,8 +186,8 @@ export function TimePicker12h({
             onClick={() => handlePeriodChange('PM')}
             className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               period === 'PM'
-                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm shadow-indigo-950/40'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-white text-primary border border-blue-200 shadow-xs'
+                : 'text-text-secondary hover:text-text-primary'
             }`}
           >
             PM
@@ -196,8 +196,8 @@ export function TimePicker12h({
       </div>
 
       {description && (
-        <p className="text-[11px] text-slate-400 mt-1">
-          {description} (System 24h: <span className="font-mono text-slate-300">{value}</span>)
+        <p className="text-[11px] text-text-secondary mt-1">
+          {description} (System 24h: <span className="font-mono text-text-primary font-medium">{value}</span>)
         </p>
       )}
     </div>

@@ -112,12 +112,11 @@ export async function processAutomatedScreenshotsForRunningTimers(): Promise<{ p
     // Fetch all currently running timers across all users
     const runningEntries = await prisma.timeEntry.findMany({
       where: {
-        status: 'RUNNING',
-        isDeleted: false,
+        isRunning: true,
       },
       include: {
-        user: { select: { id: true, name: true, employeeId: true } },
-        project: { select: { id: true, code: true, name: true } },
+        user: { select: { id: true, name: true, email: true } },
+        project: { select: { id: true, name: true } },
         screenshots: true,
       },
     });
@@ -125,7 +124,7 @@ export async function processAutomatedScreenshotsForRunningTimers(): Promise<{ p
     let createdScreenshots = 0;
 
     for (const entry of runningEntries) {
-      const elapsedSeconds = Math.max(0, Math.floor((now.getTime() - entry.startTime.getTime()) / 1000));
+      const elapsedSeconds = Math.max(0, Math.floor((now.getTime() - new Date(entry.startedAt).getTime()) / 1000));
       const targetMilestones = Math.floor(elapsedSeconds / intervalSeconds);
 
       // Check which milestone indices have already been recorded for this time entry
@@ -143,30 +142,30 @@ export async function processAutomatedScreenshotsForRunningTimers(): Promise<{ p
         }
       }
 
-      // Check milestone 0 (initial session start capture) if no screenshot has been logged yet
-      if (!recordedMilestones.has(0) && entry.screenshots.length === 0) {
+      // Check milestone 0 (initial session start capture) only at the very start of a session (targetMilestones === 0)
+      if (!recordedMilestones.has(0) && entry.screenshots.length === 0 && targetMilestones === 0) {
         const imageUrl = generateActivitySnapshotSvg({
           userName: entry.user.name,
-          employeeId: entry.user.employeeId,
-          projectCode: entry.project.code,
+          employeeId: entry.user.email,
+          projectCode: entry.project.name,
           projectName: entry.project.name,
           elapsedSeconds: 0,
           intervalMinutes,
-          capturedAt: entry.startTime,
+          capturedAt: entry.startedAt,
         });
 
         await prisma.screenshotRecord.create({
           data: {
             userId: entry.userId,
             timeEntryId: entry.id,
-            capturedAt: entry.startTime,
+            capturedAt: entry.startedAt,
             imageUrl,
             fileSize: 102400,
             metadata: JSON.stringify({
               intervalIndex: 0,
               intervalMinute: intervalMinutes,
               elapsedSeconds: 0,
-              projectCode: entry.project.code,
+              projectCode: entry.project.name,
               source: 'AUTO_INTERVAL_SCHEDULER',
             }),
           },
@@ -175,7 +174,7 @@ export async function processAutomatedScreenshotsForRunningTimers(): Promise<{ p
         recordedMilestones.add(0);
         createdScreenshots++;
         console.log(
-          `📸 [Screenshot Scheduler] Captured initial session snapshot for ${entry.user.name} (${entry.user.employeeId}) on project ${entry.project.code}`
+          `📸 [Screenshot Scheduler] Captured initial session snapshot for ${entry.user.name} (${entry.user.email}) on project ${entry.project.name}`
         );
       }
 
@@ -183,23 +182,17 @@ export async function processAutomatedScreenshotsForRunningTimers(): Promise<{ p
         continue;
       }
 
-      // Also if legacy or unindexed screenshots exist, track count
-      const existingCount = entry.screenshots.length;
-
-      for (let m = 1; m <= targetMilestones; m++) {
-        // If milestone index already exists or screenshot count covers it, skip
-        if (recordedMilestones.has(m) || (recordedMilestones.size === 0 && m <= existingCount)) {
-          continue;
-        }
-
-        const milestoneElapsedSeconds = m * intervalSeconds;
-        const milestoneTime = new Date(entry.startTime.getTime() + milestoneElapsedSeconds * 1000);
+      // ONLY process the current active milestone (targetMilestones). Never backfill past milestones that were deleted.
+      const currentMilestone = targetMilestones;
+      if (!recordedMilestones.has(currentMilestone)) {
+        const milestoneElapsedSeconds = currentMilestone * intervalSeconds;
+        const milestoneTime = new Date(new Date(entry.startedAt).getTime() + milestoneElapsedSeconds * 1000);
         const captureTime = milestoneTime <= now ? milestoneTime : now;
 
         const imageUrl = generateActivitySnapshotSvg({
           userName: entry.user.name,
-          employeeId: entry.user.employeeId,
-          projectCode: entry.project.code,
+          employeeId: entry.user.email,
+          projectCode: entry.project.name,
           projectName: entry.project.name,
           elapsedSeconds: milestoneElapsedSeconds,
           intervalMinutes,
@@ -214,19 +207,19 @@ export async function processAutomatedScreenshotsForRunningTimers(): Promise<{ p
             imageUrl,
             fileSize: 102400,
             metadata: JSON.stringify({
-              intervalIndex: m,
+              intervalIndex: currentMilestone,
               intervalMinute: intervalMinutes,
               elapsedSeconds: milestoneElapsedSeconds,
-              projectCode: entry.project.code,
+              projectCode: entry.project.name,
               source: 'AUTO_INTERVAL_SCHEDULER',
             }),
           },
         });
 
-        recordedMilestones.add(m);
+        recordedMilestones.add(currentMilestone);
         createdScreenshots++;
         console.log(
-          `📸 [Screenshot Scheduler] Captured ${intervalMinutes}m interval #${m} for ${entry.user.name} (${entry.user.employeeId}) on project ${entry.project.code}`
+          `📸 [Screenshot Scheduler] Captured ${intervalMinutes}m interval #${currentMilestone} for ${entry.user.name} (${entry.user.email}) on project ${entry.project.name}`
         );
       }
     }

@@ -7,10 +7,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'el_app_super_secure_jwt_secret_key
 
 export interface AuthUser {
   id: string;
+  accountId?: string;
   email: string;
   name: string;
   role: 'ADMIN' | 'EMPLOYEE';
-  employeeId: string;
+  employeeId?: string;
   department?: string | null;
 }
 
@@ -64,7 +65,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
   const user = await prisma.user.findUnique({
     where: { id: decoded.id },
-    select: { id: true, email: true, name: true, role: true, employeeId: true, isActive: true, department: true },
+    select: { id: true, email: true, name: true, role: true, isActive: true, accountId: true },
   });
 
   if (!user || !user.isActive) {
@@ -74,11 +75,10 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
   req.user = {
     id: user.id,
+    accountId: user.accountId,
     email: user.email,
     name: user.name,
     role: user.role as 'ADMIN' | 'EMPLOYEE',
-    employeeId: user.employeeId,
-    department: user.department,
   };
 
   next();

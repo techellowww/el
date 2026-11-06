@@ -6,7 +6,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/src/server.js",
-    "test": "tsx tests/timerAndBusinessEngine.test.ts",
+    "test": "tsx tests/clientHubEngine.test.ts",
+    "test:clienthub": "tsx tests/clientHubEngine.test.ts",
+    "worker": "tsx src/worker.ts",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "seed": "npx tsx prisma/seed.ts"
@@ -32,6 +34,7 @@
     "node-cron": "^4.6.0",
     "nodemailer": "^10.1.0",
     "prisma": "^6.4.1",
+    "socket.io": "^4.8.4",
     "tsx": "^4.19.3",
     "typescript": "^5",
     "xlsx": "^0.18.5",

@@ -123,6 +123,19 @@ export function evaluateTimeClassification(
     const closeMinutes = closeH * 60 + closeM;
     const currentMinutes = curH * 60 + curM;
 
+    const workingDays = (schedule.workingDays || 'MON,TUE,WED,THU,FRI')
+      .split(',')
+      .map((d) => d.trim().toUpperCase());
+
+    if (!workingDays.includes(dayOfWeek)) {
+      return {
+        isOutsideHours: true,
+        classification: 'OUTSIDE_HOURS',
+        needsReview: true,
+        reason: `Tracked on ${dayOfWeek}, which is outside scheduled working days (${schedule.workingDays}).`,
+      };
+    }
+
     // Normal daytime schedule (e.g., 09:00 to 18:00)
     if (closeMinutes > openMinutes) {
       if (currentMinutes < openMinutes || currentMinutes >= closeMinutes) {
@@ -192,20 +205,10 @@ export async function startProjectTimer({
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { assignments: true },
   });
 
   if (!project) {
     throw new Error('Project not found.');
-  }
-
-  if (project.status === 'COMPLETED' || project.status === 'INACTIVE') {
-    throw new Error('Cannot track time on an inactive project.');
-  }
-
-  // Employees can track time on any active project
-  if (user.role !== 'ADMIN' && project.status !== 'ACTIVE') {
-    throw new Error('Unauthorized: Project is not active for time tracking.');
   }
 
   // 2. Classify start time against office hours
@@ -241,13 +244,11 @@ export async function startProjectTimer({
     const runningEntries = await tx.timeEntry.findMany({
       where: {
         userId,
-        status: 'RUNNING',
-        endTime: null,
-        isDeleted: false,
+        isRunning: true,
       },
       include: {
         project: {
-          select: { id: true, code: true, name: true },
+          select: { id: true, name: true },
         },
       },
     });
@@ -262,14 +263,13 @@ export async function startProjectTimer({
 
     // Stop any existing running entries
     for (const running of runningEntries) {
-      const durationSeconds = Math.max(0, Math.round((now.getTime() - running.startTime.getTime()) / 1000));
+      const durationSeconds = Math.max(0, Math.round((now.getTime() - new Date(running.startedAt).getTime()) / 1000));
       previousStopped = await tx.timeEntry.update({
         where: { id: running.id },
         data: {
-          endTime: now,
-          duration: durationSeconds,
-          status: 'STOPPED',
-          updatedAt: now,
+          stoppedAt: now,
+          durationSeconds,
+          isRunning: false,
         },
       });
     }
@@ -277,23 +277,18 @@ export async function startProjectTimer({
     // B. Create the new running timer
     const newEntry = await tx.timeEntry.create({
       data: {
+        accountId: project.accountId,
         userId,
         projectId,
-        startTime: now,
-        endTime: null,
-        duration: 0,
-        targetDuration: targetDurationSeconds,
-        status: 'RUNNING',
-        classification: classificationResult.classification,
-        isOutsideHours: classificationResult.isOutsideHours,
-        needsReview: classificationResult.needsReview,
-        reviewReason: classificationResult.reason || null,
-        source: 'TIMER',
-        notes: sessionNotes || null,
-      } as any,
+        clientId: project.clientId,
+        startedAt: now,
+        isRunning: true,
+        durationSeconds: 0,
+        description: sessionNotes || null,
+      },
       include: {
         project: {
-          select: { id: true, code: true, name: true },
+          select: { id: true, name: true },
         },
       },
     });
@@ -321,15 +316,11 @@ export async function stopProjectTimer({
   // Find running entry
   const whereClause: {
     userId: string;
-    status: string;
-    endTime: null;
-    isDeleted: boolean;
+    isRunning: boolean;
     id?: string;
   } = {
     userId,
-    status: 'RUNNING',
-    endTime: null,
-    isDeleted: false,
+    isRunning: true,
   };
 
   if (timeEntryId) {
@@ -346,7 +337,7 @@ export async function stopProjectTimer({
   }
 
   // Calculate accurate duration in seconds
-  const startMs = runningEntry.startTime.getTime();
+  const startMs = new Date(runningEntry.startedAt).getTime();
   const nowMs = now.getTime();
   const rawDurationSeconds = Math.round((nowMs - startMs) / 1000);
   const durationSeconds = Math.max(0, rawDurationSeconds);
@@ -354,15 +345,14 @@ export async function stopProjectTimer({
   const updatedEntry = await prisma.timeEntry.update({
     where: { id: runningEntry.id },
     data: {
-      endTime: now,
-      duration: durationSeconds,
-      status: 'STOPPED',
-      notes: notes !== undefined ? notes : runningEntry.notes,
-      updatedAt: now,
+      stoppedAt: now,
+      durationSeconds,
+      isRunning: false,
+      description: notes !== undefined ? notes : runningEntry.description,
     },
     include: {
       project: {
-        select: { id: true, code: true, name: true },
+        select: { id: true, name: true },
       },
     },
   });
@@ -380,13 +370,11 @@ export async function getActiveTimer(userId: string) {
   return prisma.timeEntry.findFirst({
     where: {
       userId,
-      status: 'RUNNING',
-      endTime: null,
-      isDeleted: false,
+      isRunning: true,
     },
     include: {
       project: {
-        select: { id: true, code: true, name: true, status: true },
+        select: { id: true, name: true, stage: true },
       },
     },
   });
@@ -397,233 +385,117 @@ export async function getActiveTimer(userId: string) {
  */
 export async function enforceOfficeCutoffForUser(userId: string) {
   const schedule = await getOfficeSchedule();
+  // If checkbox is NOT checked, let the timer run until it is stopped manually!
   if (!schedule.autoCutoffEnabled) return;
 
   const runningEntries = await prisma.timeEntry.findMany({
     where: {
       userId,
-      status: 'RUNNING',
-      endTime: null,
-      isDeleted: false,
+      isRunning: true,
     },
   });
 
   if (runningEntries.length === 0) return;
 
   const now = new Date();
+  const tz = schedule.timezone || 'Asia/Kolkata';
 
   for (const entry of runningEntries) {
-    const startClass = evaluateTimeClassification(entry.startTime, schedule);
-    const nowClass = evaluateTimeClassification(now, schedule);
+    const closingTime = getClosingTimeForDate(entry.startedAt, schedule);
+    const [closeH, closeM] = closingTime.split(':').map(Number);
+    const closeMinutes = closeH * 60 + closeM;
 
-    // Case 1: Planned target duration reached (user-selected duration limit)
-    const targetSec = (entry as any).targetDuration as number | null;
-    const elapsedSeconds = Math.max(0, Math.round((now.getTime() - entry.startTime.getTime()) / 1000));
+    const currentZoned = toZonedTime(now, tz);
+    const curMinutes = currentZoned.getHours() * 60 + currentZoned.getMinutes();
 
-    if (targetSec && targetSec > 0 && elapsedSeconds >= targetSec) {
-      const cutoffDate = new Date(entry.startTime.getTime() + targetSec * 1000);
-      await prisma.timeEntry.update({
-        where: { id: entry.id },
-        data: {
-          endTime: cutoffDate,
-          duration: targetSec,
-          status: 'AUTO_CUTOFF',
-          source: 'AUTO_CUTOFF',
-          notes: (entry.notes ? entry.notes + ' ' : '') + `[Auto-stopped: Reached planned ${Math.round(targetSec / 60)}m outside-hours limit]`,
-          updatedAt: now,
-        },
-      });
+    const startDayStr = formatInTimeZone(entry.startedAt, tz, 'yyyy-MM-dd');
+    const currentDayStr = formatInTimeZone(now, tz, 'yyyy-MM-dd');
 
-      await logAuditEvent({
-        userId: null,
-        action: 'TIMER_AUTO_CUTOFF',
-        targetEntity: 'TimeEntry',
-        targetId: entry.id,
-        mandatoryReason: `Timer automatically stopped upon reaching selected outside-hours duration limit (${Math.round(targetSec / 60)} mins).`,
-        details: { userId, timeEntryId: entry.id, targetDuration: targetSec },
-      });
-      continue;
-    }
+    const hasOfficeEnded = startDayStr !== currentDayStr || curMinutes >= closeMinutes;
 
-    // Case 2: Started during regular hours and current time is past office closing time
-    if (!startClass.isOutsideHours && nowClass.isOutsideHours) {
-      // Calculate closing time cutoff timestamp on entry's day in org timezone
-      const startZoned = toZonedTime(entry.startTime, schedule.timezone);
-      const closingTime = getClosingTimeForDate(entry.startTime, schedule);
-      const [closeH, closeM] = closingTime.split(':').map(Number);
-      
-      const cutoffDate = new Date(startZoned);
-      cutoffDate.setHours(closeH, closeM, 0, 0);
-
-      // Duration capped at closing time
-      const cutoffMs = cutoffDate.getTime();
-      const startMs = entry.startTime.getTime();
-      const durationSeconds = Math.max(0, Math.round((cutoffMs - startMs) / 1000));
+    if (hasOfficeEnded) {
+      const startMs = new Date(entry.startedAt).getTime();
+      const elapsedSeconds = Math.max(1, Math.round((now.getTime() - startMs) / 1000));
 
       await prisma.timeEntry.update({
         where: { id: entry.id },
         data: {
-          endTime: cutoffDate,
-          duration: durationSeconds,
-          status: 'AUTO_CUTOFF',
-          source: 'AUTO_CUTOFF',
-          notes: (entry.notes ? entry.notes + ' ' : '') + `[Auto-stopped at office closing time ${closingTime}]`,
-          updatedAt: now,
+          isRunning: false,
+          stoppedAt: now,
+          durationSeconds: elapsedSeconds,
+          description: (entry.description ? entry.description + ' ' : '') + `[Auto-stopped: Office hours ended at ${closingTime}]`,
         },
       });
 
       await logAuditEvent({
-        userId: null,
+        userId,
         action: 'TIMER_AUTO_CUTOFF',
         targetEntity: 'TimeEntry',
         targetId: entry.id,
-        mandatoryReason: `Timer automatically stopped at office closing time (${closingTime}) under policy rules.`,
+        mandatoryReason: `Timer automatically stopped at office end time (${closingTime}) under policy rules.`,
         details: { userId, timeEntryId: entry.id, closingTime },
-      });
-      continue;
-    }
-
-    // Case 3: Safety cap for runaway outside-hours timers (4 hours max)
-    if (startClass.isOutsideHours && elapsedSeconds >= 14400) {
-      const maxCutoffDate = new Date(entry.startTime.getTime() + 14400 * 1000);
-      await prisma.timeEntry.update({
-        where: { id: entry.id },
-        data: {
-          endTime: maxCutoffDate,
-          duration: 14400,
-          status: 'AUTO_CUTOFF',
-          source: 'AUTO_CUTOFF',
-          notes: (entry.notes ? entry.notes + ' ' : '') + `[Auto-stopped: Exceeded 4-hour safety cap for outside-hours sessions]`,
-          updatedAt: now,
-        },
-      });
-
-      await logAuditEvent({
-        userId: null,
-        action: 'TIMER_AUTO_CUTOFF',
-        targetEntity: 'TimeEntry',
-        targetId: entry.id,
-        mandatoryReason: 'Timer automatically stopped after exceeding 4-hour outside-hours safety cap.',
-        details: { userId, timeEntryId: entry.id },
       });
     }
   }
 }
 
 /**
- * Rule 3: Global cron / scheduled worker to enforce office closing cutoff across all active timers.
+ * Rule: Global cron / scheduled worker to enforce office closing cutoff across all active timers.
+ * - If checkbox is checked (autoCutoffEnabled = true), stops timers automatically once office time ends.
+ * - If checkbox is not checked (autoCutoffEnabled = false), lets timers continue running until stopped manually.
  */
 export async function enforceGlobalOfficeCutoffs() {
   const schedule = await getOfficeSchedule();
-  if (!schedule.autoCutoffEnabled) return { processed: 0 };
+  // If checkbox is NOT checked, let the timer run until it is stopped manually!
+  if (!schedule.autoCutoffEnabled) {
+    return { processed: 0 };
+  }
 
   const runningEntries = await prisma.timeEntry.findMany({
     where: {
-      status: 'RUNNING',
-      endTime: null,
-      isDeleted: false,
+      isRunning: true,
     },
     include: { user: true },
   });
 
   let processedCount = 0;
   const now = new Date();
+  const tz = schedule.timezone || 'Asia/Kolkata';
 
   for (const entry of runningEntries) {
-    const startClass = evaluateTimeClassification(entry.startTime, schedule);
-    const nowClass = evaluateTimeClassification(now, schedule);
+    const closingTime = getClosingTimeForDate(entry.startedAt, schedule);
+    const [closeH, closeM] = closingTime.split(':').map(Number);
+    const closeMinutes = closeH * 60 + closeM;
 
-    // Case 1: Planned target duration reached for outside-hours sessions
-    const targetSec = (entry as any).targetDuration as number | null;
-    const elapsedSeconds = Math.max(0, Math.round((now.getTime() - entry.startTime.getTime()) / 1000));
+    const currentZoned = toZonedTime(now, tz);
+    const curMinutes = currentZoned.getHours() * 60 + currentZoned.getMinutes();
 
-    if (targetSec && targetSec > 0 && elapsedSeconds >= targetSec) {
-      const cutoffDate = new Date(entry.startTime.getTime() + targetSec * 1000);
-      await prisma.timeEntry.update({
-        where: { id: entry.id },
-        data: {
-          endTime: cutoffDate,
-          duration: targetSec,
-          status: 'AUTO_CUTOFF',
-          source: 'AUTO_CUTOFF',
-          notes: (entry.notes ? entry.notes + ' ' : '') + `[Auto-stopped: Reached planned ${Math.round(targetSec / 60)}m outside-hours limit]`,
-          updatedAt: now,
-        },
-      });
+    const startDayStr = formatInTimeZone(entry.startedAt, tz, 'yyyy-MM-dd');
+    const currentDayStr = formatInTimeZone(now, tz, 'yyyy-MM-dd');
 
-      await logAuditEvent({
-        userId: null,
-        action: 'TIMER_AUTO_CUTOFF',
-        targetEntity: 'TimeEntry',
-        targetId: entry.id,
-        mandatoryReason: `Scheduled cutoff enforced upon reaching planned outside-hours limit (${Math.round(targetSec / 60)} mins).`,
-        details: { employeeId: entry.user.employeeId, entryId: entry.id, targetDuration: targetSec },
-      });
+    const hasOfficeEnded = startDayStr !== currentDayStr || curMinutes >= closeMinutes;
 
-      processedCount++;
-      continue;
-    }
-
-    // Case 2: Started inside office hours and current time is outside hours (closing cutoff)
-    if (!startClass.isOutsideHours && nowClass.isOutsideHours) {
-      const startZoned = toZonedTime(entry.startTime, schedule.timezone);
-      const closingTime = getClosingTimeForDate(entry.startTime, schedule);
-      const [closeH, closeM] = closingTime.split(':').map(Number);
-      
-      const cutoffDate = new Date(startZoned);
-      cutoffDate.setHours(closeH, closeM, 0, 0);
-
-      const cutoffMs = cutoffDate.getTime();
-      const startMs = entry.startTime.getTime();
-      const durationSeconds = Math.max(0, Math.round((cutoffMs - startMs) / 1000));
+    if (hasOfficeEnded) {
+      const startMs = new Date(entry.startedAt).getTime();
+      const elapsedSeconds = Math.max(1, Math.round((now.getTime() - startMs) / 1000));
 
       await prisma.timeEntry.update({
         where: { id: entry.id },
         data: {
-          endTime: cutoffDate,
-          duration: durationSeconds,
-          status: 'AUTO_CUTOFF',
-          source: 'AUTO_CUTOFF',
-          notes: (entry.notes ? entry.notes + ' ' : '') + `[Auto-stopped at office closing time ${closingTime}]`,
-          updatedAt: now,
+          isRunning: false,
+          stoppedAt: now,
+          durationSeconds: elapsedSeconds,
+          description: (entry.description ? entry.description + ' ' : '') + `[Auto-stopped: Office hours ended at ${closingTime}]`,
         },
       });
 
       await logAuditEvent({
-        userId: null,
+        userId: entry.userId,
         action: 'TIMER_AUTO_CUTOFF',
         targetEntity: 'TimeEntry',
         targetId: entry.id,
-        mandatoryReason: `Scheduled cutoff enforced at office closing time (${closingTime}).`,
-        details: { employeeId: entry.user.employeeId, entryId: entry.id, closingTime },
-      });
-
-      processedCount++;
-      continue;
-    }
-
-    // Case 3: Safety cap for runaway outside-hours timers (4 hours max)
-    if (startClass.isOutsideHours && elapsedSeconds >= 14400) {
-      const maxCutoffDate = new Date(entry.startTime.getTime() + 14400 * 1000);
-      await prisma.timeEntry.update({
-        where: { id: entry.id },
-        data: {
-          endTime: maxCutoffDate,
-          duration: 14400,
-          status: 'AUTO_CUTOFF',
-          source: 'AUTO_CUTOFF',
-          notes: (entry.notes ? entry.notes + ' ' : '') + `[Auto-stopped: Exceeded 4-hour safety cap for outside-hours sessions]`,
-          updatedAt: now,
-        },
-      });
-
-      await logAuditEvent({
-        userId: null,
-        action: 'TIMER_AUTO_CUTOFF',
-        targetEntity: 'TimeEntry',
-        targetId: entry.id,
-        mandatoryReason: 'Scheduled cutoff enforced after exceeding 4-hour outside-hours safety cap.',
-        details: { employeeId: entry.user.employeeId, entryId: entry.id },
+        mandatoryReason: `Timer automatically stopped at office closing time (${closingTime}).`,
+        details: { userId: entry.userId, entryId: entry.id, closingTime },
       });
 
       processedCount++;

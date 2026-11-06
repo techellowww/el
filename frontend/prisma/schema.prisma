@@ -1,0 +1,571 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                 String             @id @default(uuid())
+  name               String
+  currency           String             @default("USD")
+  logoUrl            String?
+  replyToEmail       String?
+  emailSettings      String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  users              User[]
+  clients            Client[]
+  clientAssignments  ClientAssignment[]
+  projects           Project[]
+  statusUpdates      StatusUpdate[]
+  timeEntries        TimeEntry[]
+  events             Event[]
+  eventAttendees     EventAttendee[]
+  messages           Message[]
+  messageReads       MessageRead[]
+  proposals          Proposal[]
+  proposalVersions   ProposalVersion[]
+  proposalSignatures ProposalSignature[]
+  aiGenerations      AiGeneration[]
+  invoices           Invoice[]
+  invoiceItems       InvoiceItem[]
+  payments           Payment[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+
+  @@map("ch_accounts")
+}
+
+model User {
+  id                String             @id @default(uuid())
+  accountId         String
+  email             String
+  passwordHash      String
+  name              String
+  role              String             @default("EMPLOYEE") // "ADMIN" | "EMPLOYEE"
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  account           Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  assignedClients   ClientAssignment[]
+  timeEntries       TimeEntry[]
+  statusUpdates     StatusUpdate[]
+  createdEvents     Event[]
+  eventAttendees    EventAttendee[]
+  messages          Message[]
+  messageReads      MessageRead[]
+  auditLogs         AuditLog[]
+  screenshots       ScreenshotRecord[]
+
+  @@unique([accountId, email])
+  @@index([accountId])
+  @@index([role])
+  @@map("ch_users")
+}
+
+model Client {
+  id                   String             @id @default(uuid())
+  accountId            String
+  name                 String
+  company              String?
+  email                String
+  phone                String?
+  notes                String?
+  portalTokenHash      String?            @unique
+  portalTokenExpiresAt DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  account              Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  assignments          ClientAssignment[]
+  projects             Project[]
+  invoices             Invoice[]
+  events               Event[]
+  messages             Message[]
+  messageReads         MessageRead[]
+  proposals            Proposal[]
+  timeEntries          TimeEntry[]
+
+  @@index([accountId])
+  @@index([portalTokenHash])
+  @@map("ch_clients")
+}
+
+model ClientAssignment {
+  id         String   @id @default(uuid())
+  accountId  String
+  clientId   String
+  userId     String
+  assignedAt DateTime @default(now())
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, userId])
+  @@index([accountId])
+  @@index([clientId])
+  @@index([userId])
+  @@map("ch_client_assignments")
+}
+
+model Project {
+  id              String         @id @default(uuid())
+  accountId       String
+  clientId        String
+  name            String
+  description     String?
+  stage           String         @default("DISCOVERY") // "DISCOVERY" | "IN_PROGRESS" | "AWAITING_REVIEW" | "LIVE"
+  stagingUrl      String?
+  liveUrl         String?
+  budgetHours     Float?
+  hourlyRateCents Int?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  account         Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  client          Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  statusUpdates   StatusUpdate[]
+  timeEntries     TimeEntry[]
+  invoices        Invoice[]
+  events          Event[]
+  messages        Message[]
+  proposals       Proposal[]
+
+  @@index([accountId])
+  @@index([clientId])
+  @@index([stage])
+  @@map("ch_projects")
+}
+
+model StatusUpdate {
+  id           String   @id @default(uuid())
+  accountId    String
+  projectId    String
+  userId       String?
+  title        String
+  body         String
+  notifyClient Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user         User?    @relation(fields: [userId], references: [id])
+
+  @@index([accountId])
+  @@index([projectId])
+  @@map("ch_status_updates")
+}
+
+model TimeEntry {
+  id              String        @id @default(uuid())
+  accountId       String
+  userId          String
+  projectId       String
+  clientId        String?
+  description     String?
+  startedAt       DateTime
+  stoppedAt       DateTime?
+  durationSeconds Int           @default(0)
+  isRunning       Boolean       @default(false)
+  isLocked        Boolean       @default(false)
+  invoiceId       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  account         Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client          Client?       @relation(fields: [clientId], references: [id])
+  invoice         Invoice?      @relation(fields: [invoiceId], references: [id])
+  invoiceItems    InvoiceItem[]
+  screenshots     ScreenshotRecord[]
+
+  @@index([accountId])
+  @@index([clientId])
+  @@index([projectId])
+  @@index([userId, isRunning])
+  @@map("ch_time_entries")
+}
+
+model Event {
+  id          String          @id @default(uuid())
+  accountId   String
+  clientId    String?
+  projectId   String?
+  createdById String
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  locationUrl String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  account     Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  client      Client?         @relation(fields: [clientId], references: [id])
+  project     Project?        @relation(fields: [projectId], references: [id])
+  creator     User            @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  attendees   EventAttendee[]
+
+  @@index([accountId])
+  @@index([startTime])
+  @@map("ch_events")
+}
+
+model EventAttendee {
+  id        String   @id @default(uuid())
+  accountId String
+  eventId   String
+  userId    String?
+  email     String
+  name      String?
+  isClient  Boolean  @default(false)
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([accountId])
+  @@index([eventId])
+  @@map("ch_event_attendees")
+}
+
+model Proposal {
+  id                   String             @id @default(uuid())
+  accountId            String
+  clientId             String
+  projectId            String?
+  title                String
+  status               String             @default("DRAFT") // "DRAFT" | "SENT" | "SIGNED" | "DECLINED"
+  tokenHash            String?            @unique
+  currentVersionNumber Int                @default(1)
+  sentAt               DateTime?
+  expiresAt            DateTime?
+  declinedAt           DateTime?
+  declineReason        String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  account              Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  client               Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project              Project?           @relation(fields: [projectId], references: [id])
+  versions             ProposalVersion[]
+  signature            ProposalSignature?
+
+  @@index([accountId])
+  @@index([clientId])
+  @@index([status])
+  @@map("ch_proposals")
+}
+
+model ProposalVersion {
+  id            String              @id @default(uuid())
+  accountId     String
+  proposalId    String
+  versionNumber Int
+  contentJson   String?
+  contentHtml   String?
+  contentHash   String?
+  logoSnapshotUrl String?
+  isLocked      Boolean             @default(false)
+  createdAt     DateTime            @default(now())
+  account     Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  proposal    Proposal            @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  signatures  ProposalSignature[]
+
+  @@unique([proposalId, versionNumber])
+  @@index([accountId])
+  @@map("ch_proposal_versions")
+}
+
+model ProposalSignature {
+  id            String          @id @default(uuid())
+  accountId     String
+  proposalId    String          @unique
+  versionId     String
+  signerName    String
+  signerEmail   String
+  signatureData String
+  ipAddress     String?
+  signedAt      DateTime        @default(now())
+  pdfUrl        String?
+  account       Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  proposal      Proposal        @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  version       ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("ch_proposal_signatures")
+}
+
+model AiGeneration {
+  id         String   @id @default(uuid())
+  accountId  String
+  prompt     String
+  response   String
+  tokensUsed Int      @default(0)
+  createdAt  DateTime @default(now())
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("ch_ai_generations")
+}
+
+model Invoice {
+  id                   String        @id @default(uuid())
+  accountId            String
+  clientId             String
+  projectId            String?
+  invoiceNumber        Int?
+  invoiceNumberDisplay String?
+  status               String        @default("DRAFT") // "DRAFT" | "SENT" | "PAID" | "VOID"
+  tokenHash            String?       @unique
+  currency             String        @default("USD")
+  subtotalCents        Int           @default(0)
+  taxCents             Int           @default(0)
+  totalCents           Int           @default(0)
+  dueDate              DateTime?
+  sentAt               DateTime?
+  paidAt               DateTime?
+  voidedAt             DateTime?
+  notes                String?
+  logoSnapshotUrl      String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  account              Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  client               Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project              Project?      @relation(fields: [projectId], references: [id])
+  items                InvoiceItem[]
+  payments             Payment[]
+  timeEntries          TimeEntry[]
+
+  @@unique([accountId, invoiceNumber])
+  @@index([accountId])
+  @@index([clientId])
+  @@index([status])
+  @@map("ch_invoices")
+}
+
+model InvoiceItem {
+  id             String     @id @default(uuid())
+  accountId      String
+  invoiceId      String
+  description    String
+  quantity       Float      @default(1.0)
+  unitPriceCents Int
+  totalCents     Int
+  timeEntryId    String?
+  account        Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  invoice        Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  timeEntry      TimeEntry? @relation(fields: [timeEntryId], references: [id])
+
+  @@index([accountId])
+  @@index([invoiceId])
+  @@map("ch_invoice_items")
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  accountId     String
+  invoiceId     String
+  amountCents   Int
+  currency      String   @default("USD")
+  paymentMethod String   @default("MANUAL")
+  notes         String?
+  paidAt        DateTime @default(now())
+  createdAt     DateTime @default(now())
+  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([invoiceId])
+  @@map("ch_payments")
+}
+
+model Message {
+  id               String       @id @default(uuid())
+  accountId        String
+  clientId         String
+  projectId        String?
+  senderType       String       // "TEAM" | "CLIENT"
+  senderUserId     String?
+  clientSenderName String?
+  content          String
+  attachmentUrl    String?
+  attachmentName   String?
+  attachmentSize   Int?
+  isInternalNote   Boolean      @default(false)
+  isDeleted        Boolean      @default(false)
+  editedAt         DateTime?
+  createdAt        DateTime     @default(now())
+  account          Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  client           Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project          Project?     @relation(fields: [projectId], references: [id])
+  senderUser       User?        @relation(fields: [senderUserId], references: [id])
+
+  @@index([accountId])
+  @@index([clientId, createdAt])
+  @@index([projectId])
+  @@map("ch_messages")
+}
+
+model MessageRead {
+  id                String   @id @default(uuid())
+  accountId         String
+  clientId          String
+  userId            String?
+  isClient          Boolean  @default(false)
+  lastReadMessageId String?
+  lastReadAt        DateTime @default(now())
+  account           Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user              User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, userId])
+  @@index([accountId])
+  @@map("ch_message_reads")
+}
+
+model Notification {
+  id             String    @id @default(uuid())
+  accountId      String
+  type           String
+  recipientEmail String
+  subject        String
+  bodyHtml       String?
+  metadata       String?
+  status         String    @default("QUEUED") // "QUEUED" | "SENT" | "FAILED"
+  retryCount     Int       @default(0)
+  errorLog       String?
+  scheduledFor   DateTime  @default(now())
+  sentAt         DateTime?
+  createdAt      DateTime  @default(now())
+  account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([status, scheduledFor])
+  @@map("ch_notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  accountId  String
+  userId     String?
+  action     String
+  entityType String
+  entityId   String
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([accountId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@map("ch_audit_logs")
+}
+
+model OfficeSchedule {
+  id                String   @id @default("default-schedule")
+  accountId         String?
+  openingTime       String   @default("09:00")
+  closingTime       String   @default("18:00")
+  workingDays       String   @default("MON,TUE,WED,THU,FRI")
+  timezone          String   @default("Asia/Kolkata")
+  allowOutsideHours Boolean  @default(true)
+  autoCutoffEnabled Boolean  @default(true)
+  dayTimings        String?
+  updatedById       String?
+  updatedAt         DateTime @updatedAt
+
+  @@map("ch_office_schedules")
+}
+
+model ScreenshotSetting {
+  id              String   @id @default("default-screenshot-setting")
+  accountId       String?
+  enabled         Boolean  @default(false)
+  intervalMinutes Int      @default(60)
+  retentionDays   Int      @default(30)
+  requireConsent  Boolean  @default(true)
+  consentNotice   String   @default("Screenshots are periodically captured for activity verification during active project timers.")
+  updatedAt       DateTime @updatedAt
+
+  @@map("ch_screenshot_settings")
+}
+
+model ScreenshotRecord {
+  id          String     @id @default(uuid())
+  accountId   String?
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeEntryId String?
+  timeEntry   TimeEntry? @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
+  capturedAt  DateTime   @default(now())
+  imageUrl    String
+  fileSize    Int        @default(0)
+  metadata    String?
+  viewedAt    DateTime?
+  viewedById  String?
+
+  @@index([userId, capturedAt])
+  @@map("ch_screenshot_records")
+}
+
+model EmailScheduleSetting {
+  id             String   @id @default("default-email-setting")
+  accountId      String?
+  enabled        Boolean  @default(true)
+  scheduleType   String   @default("DAILY") // "DAILY" | "WEEKLY" | "MONTHLY"
+  scheduleTime   String   @default("18:00")
+  dailyEnabled   Boolean  @default(true)
+  dailyTime      String   @default("18:00")
+  weeklyEnabled  Boolean  @default(true)
+  weeklyDay      String   @default("FRI")
+  weeklyTime     String   @default("18:00")
+  monthlyEnabled Boolean  @default(false)
+  monthlyDay     Int      @default(1)
+  monthlyTime    String   @default("18:00")
+  recipients     String   @default("admin@clienthub.local")
+  timezone       String   @default("Asia/Kolkata")
+  smtpHost       String?  @default("smtp.gmail.com")
+  smtpPort       Int?     @default(587)
+  smtpUser       String?
+  smtpPass       String?
+  smtpFrom       String?  @default("ClientHub <notifications@clienthub.local>")
+  lastSentKey    String?
+  updatedAt      DateTime @updatedAt
+
+  @@map("ch_email_settings")
+}
+
+model EmailDeliveryLog {
+  id         String    @id @default(uuid())
+  accountId  String?
+  type       String
+  recipient  String
+  subject    String
+  status     String    @default("SENT") // "SENT" | "FAILED" | "SIMULATED"
+  content    String?
+  error      String?
+  retryCount Int       @default(0)
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([type, createdAt])
+  @@map("ch_email_delivery_logs")
+}
+
+model SubProject {
+  id          String   @id @default(uuid())
+  projectId   String
+  accountId   String
+  name        String
+  description String?
+  stage       String   @default("IN_PROGRESS")
+  budgetHours Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([accountId])
+  @@map("ch_sub_projects")
+}
+

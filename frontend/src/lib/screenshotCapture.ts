@@ -44,6 +44,12 @@ export async function requestScreenStream(): Promise<MediaStream | null> {
     return null;
   }
 
+  // If a live desktop stream is already active and healthy, reuse it without reprompting
+  if (isScreenStreamActive() && activeScreenStream) {
+    notifyStreamChange(true);
+    return activeScreenStream;
+  }
+
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: {
@@ -124,6 +130,59 @@ export function stopScreenStream() {
     activeVideoElement = null;
   }
   notifyStreamChange(false);
+}
+
+export function getActiveVideoElement(): HTMLVideoElement | null {
+  return activeVideoElement;
+}
+
+export function ensureVideoPlaying() {
+  if (activeVideoElement && activeVideoElement.paused && activeScreenStream) {
+    activeVideoElement.play().catch(() => {});
+  }
+}
+
+let prevFrameSample: Uint8ClampedArray | null = null;
+let offscreenSampleCanvas: HTMLCanvasElement | null = null;
+
+export function checkScreenFrameChanged(): boolean {
+  if (!activeVideoElement || activeVideoElement.readyState < 2 || !activeScreenStream) {
+    return false;
+  }
+  try {
+    if (!offscreenSampleCanvas) {
+      offscreenSampleCanvas = document.createElement('canvas');
+      offscreenSampleCanvas.width = 32;
+      offscreenSampleCanvas.height = 18;
+    }
+    const ctx = offscreenSampleCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+    ctx.drawImage(activeVideoElement, 0, 0, 32, 18);
+    const currData = ctx.getImageData(0, 0, 32, 18).data;
+    if (!prevFrameSample || prevFrameSample.length !== currData.length) {
+      prevFrameSample = new Uint8ClampedArray(currData);
+      return false;
+    }
+
+    let diffCount = 0;
+    for (let i = 0; i < currData.length; i += 4) {
+      const diff = Math.abs(currData[i] - prevFrameSample[i]) +
+                   Math.abs(currData[i + 1] - prevFrameSample[i + 1]) +
+                   Math.abs(currData[i + 2] - prevFrameSample[i + 2]);
+      if (diff > 15) {
+        diffCount++;
+      }
+    }
+
+    prevFrameSample.set(currData);
+    return diffCount >= 3;
+  } catch {
+    return false;
+  }
+}
+
+export function getActiveScreenStream(): MediaStream | null {
+  return activeScreenStream;
 }
 
 export function isScreenStreamActive(): boolean {

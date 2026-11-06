@@ -1,11 +1,19 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import './globals.css';
 import { AppShell } from '@/components/AppShell';
 
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+  weight: ['400', '500', '600', '700'],
+});
+
 export const metadata: Metadata = {
-  title: 'EL App — Employee Project Time Tracking & Management System',
+  title: 'ClientHub — Agency & Client Operations Platform',
   description:
-    'Production-grade employee project time tracking, working-hour management, project monitoring, automated reporting, and administrative control.',
+    'Unified operations platform for web agencies and freelancers to manage clients, project deliverables, working hours, proposals, and client communication.',
 };
 
 export default function RootLayout({
@@ -14,9 +22,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="h-full bg-slate-950 text-slate-100 antialiased" suppressHydrationWarning>
+    <html lang="en" className={`h-full bg-app-background text-text-primary antialiased ${inter.variable}`} suppressHydrationWarning>
       <body
-        className="min-h-full flex flex-col font-sans bg-slate-950 text-slate-100 selection:bg-blue-600 selection:text-white"
+        className={`min-h-full flex flex-col font-sans ${inter.className} bg-app-background text-text-primary selection:bg-primary selection:text-white`}
         suppressHydrationWarning
       >
         <AppShell>{children}</AppShell>
