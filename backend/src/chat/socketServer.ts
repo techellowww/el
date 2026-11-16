@@ -523,11 +523,6 @@ export function initChatSocketServer(httpServer: HttpServer) {
             });
           }
         }
-              unreadCount: projUnread,
-              updatedAt: projLastMsg?.createdAt.toISOString() || proj.updatedAt.toISOString(),
-            });
-          }
-        }
 
         if (typeof ack === 'function') {
           ack({ success: true, conversations: conversationList });
