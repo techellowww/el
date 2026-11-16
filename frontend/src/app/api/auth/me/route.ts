@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getAuthUser, extractTokenFromRequest } from '@/lib/server/auth';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   const user = await getAuthUser(request);
   if (!user) {

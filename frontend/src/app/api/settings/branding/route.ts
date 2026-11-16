@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/settings/branding (Accessible by all authenticated users: Admin and Employee)
 export async function GET(request: Request) {
   const session = await getSessionUser(request);

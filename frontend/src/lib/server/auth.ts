@@ -2,8 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import { prisma } from '../prisma';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'el_app_super_secure_jwt_secret_key_2026_xyz_production_ready';
+import { JWT_SECRET } from '../auth/token';
 
 export interface AuthUser {
   id: string;

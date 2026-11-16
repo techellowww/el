@@ -89,7 +89,97 @@ try {
           },
         });
 
-        console.log('✅ [deploy-prepare] Initial admin (admin@clienthub.local) and employee seeded successfully!');
+        // Seed Sample Clients
+        const client1 = await prisma.client.upsert({
+          where: { id: 'client-bright-bakery' },
+          update: { name: 'Bright Bakery', company: 'Bright Bakery Co.', email: 'orders@brightbakery.com' },
+          create: {
+            id: 'client-bright-bakery',
+            accountId: account.id,
+            name: 'Bright Bakery',
+            company: 'Bright Bakery Co.',
+            email: 'orders@brightbakery.com',
+            phone: '+1 (555) 234-5678',
+            notes: 'Preferred client. Weekly sync on Thursdays.',
+          },
+        });
+
+        const client2 = await prisma.client.upsert({
+          where: { id: 'client-apex-logistics' },
+          update: { name: 'Apex Logistics', company: 'Apex Global Freight LLC', email: 'dispatch@apexlogistics.com' },
+          create: {
+            id: 'client-apex-logistics',
+            accountId: account.id,
+            name: 'Apex Logistics',
+            company: 'Apex Global Freight LLC',
+            email: 'dispatch@apexlogistics.com',
+            phone: '+1 (555) 987-6543',
+            notes: 'Enterprise contract client.',
+          },
+        });
+
+        // Assign Employee to Client 1
+        await prisma.clientAssignment.upsert({
+          where: {
+            clientId_userId: {
+              clientId: client1.id,
+              userId: 'user-employee-alpha',
+            },
+          },
+          update: {},
+          create: {
+            accountId: account.id,
+            clientId: client1.id,
+            userId: 'user-employee-alpha',
+          },
+        });
+
+        // Seed Sample Project
+        await prisma.project.upsert({
+          where: { id: 'proj-bakery-redesign' },
+          update: { stage: 'IN_PROGRESS' },
+          create: {
+            id: 'proj-bakery-redesign',
+            accountId: account.id,
+            clientId: client1.id,
+            name: 'Bakery E-Commerce Redesign',
+            description: 'Full Next.js storefront migration with online ordering and checkout.',
+            stage: 'IN_PROGRESS',
+            budgetHours: 60,
+            hourlyRateCents: 9500,
+          },
+        });
+
+        // Seed Default Settings
+        await prisma.officeSchedule.upsert({
+          where: { id: 'default-schedule' },
+          update: {},
+          create: {
+            id: 'default-schedule',
+            accountId: account.id,
+            openingTime: '09:00',
+            closingTime: '18:00',
+            workingDays: 'MON,TUE,WED,THU,FRI',
+            timezone: 'Asia/Kolkata',
+            allowOutsideHours: true,
+            autoCutoffEnabled: true,
+          },
+        });
+
+        await prisma.screenshotSetting.upsert({
+          where: { id: 'default-screenshot-setting' },
+          update: {},
+          create: {
+            id: 'default-screenshot-setting',
+            accountId: account.id,
+            enabled: false,
+            intervalMinutes: 60,
+            retentionDays: 30,
+            requireConsent: true,
+          },
+        });
+
+        console.log('✅ [deploy-prepare] Seeded admin, employee, sample clients, projects & settings!');
       } else {
         console.log(`ℹ️ [deploy-prepare] Database already contains ${userCount} users. Seeding skipped.`);
       }

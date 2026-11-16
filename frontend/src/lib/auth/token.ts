@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "clienthub_fallback_secret_key_2026_xyz";
+export const JWT_SECRET = process.env.JWT_SECRET || "el_app_super_secure_jwt_secret_key_2026_xyz_production_ready";
 
 export interface SessionPayload {
   userId: string;

@@ -212,6 +212,15 @@ export function ChatDrawer() {
       return;
     }
 
+    if (
+      typeof window !== 'undefined' &&
+      !['localhost', '127.0.0.1'].includes(window.location.hostname) &&
+      (CHAT_SERVER_URL.includes('localhost') || CHAT_SERVER_URL.includes('127.0.0.1'))
+    ) {
+      // In production deployment without a configured remote chat server URL, skip connecting to localhost
+      return;
+    }
+
     setIsConnecting(true);
 
     const socket = io(CHAT_SERVER_URL, {
