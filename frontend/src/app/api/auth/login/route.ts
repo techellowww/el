@@ -92,10 +92,16 @@ export async function POST(request: Request) {
 
     setAuthCookie(response, token);
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error);
+    const errorMessage = error?.message || 'An unexpected server error occurred during login.';
     return NextResponse.json(
-      { error: 'An unexpected server error occurred during login.' },
+      {
+        error: errorMessage,
+        details: error?.message || String(error),
+        code: error?.code,
+        name: error?.name,
+      },
       { status: 500 }
     );
   }
