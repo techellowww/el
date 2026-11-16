@@ -20,7 +20,13 @@ export async function GET(request?: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const session = await getSessionUser();
+    const session = await getSessionUser(request);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (session.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
 
     const {

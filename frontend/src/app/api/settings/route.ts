@@ -65,7 +65,7 @@ export async function GET(request?: Request) {
 
 // PATCH /api/settings (Branding update)
 export async function PATCH(request: Request) {
-  const session = await getSessionUser();
+  const session = await getSessionUser(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -115,7 +115,7 @@ export async function PATCH(request: Request) {
 
 // DELETE /api/settings (Delete agency logo)
 export async function DELETE(request: Request) {
-  const session = await getSessionUser();
+  const session = await getSessionUser(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -158,7 +158,7 @@ export async function DELETE(request: Request) {
 
 // POST /api/settings (Create employee)
 export async function POST(request: Request) {
-  const session = await getSessionUser();
+  const session = await getSessionUser(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
