@@ -82,15 +82,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }));
   },
   setAgencyBranding: (branding) =>
-    set((state) => {
-      const updated = { ...state.agencyBranding, ...branding };
-      if (typeof window !== 'undefined') {
-        try {
-          window.dispatchEvent(new CustomEvent('ch_agency_branding_updated', { detail: updated }));
-        } catch {}
-      }
-      return { agencyBranding: updated };
-    }),
+    set((state) => ({ agencyBranding: { ...state.agencyBranding, ...branding } })),
   fetchBranding: async () => {
     try {
       const res = await fetch('/api/settings/branding');

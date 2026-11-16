@@ -262,16 +262,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   // Real-time synchronization of agency branding (agency name & brand logo) for the sidebar
   useEffect(() => {
     fetchBranding();
-    const handleBrandingEvent = (e: any) => {
-      if (e.detail) {
-        setAgencyBranding(e.detail);
-      }
-    };
-    window.addEventListener('ch_agency_branding_updated', handleBrandingEvent);
-    return () => {
-      window.removeEventListener('ch_agency_branding_updated', handleBrandingEvent);
-    };
-  }, [fetchBranding, setAgencyBranding]);
+  }, [fetchBranding]);
 
   // Periodic background check for automated email report dispatch
   useEffect(() => {
