@@ -15,6 +15,15 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!process.env.DATABASE_URL && !process.env.POSTGRES_PRISMA_URL && !process.env.POSTGRES_URL) {
+      return NextResponse.json(
+        {
+          error: 'DATABASE_URL is missing in deployment. Please add your PostgreSQL connection string in Vercel Project Settings > Environment Variables.',
+        },
+        { status: 500 }
+      );
+    }
+
     const user = await prisma.user.findFirst({
       where: { email: email.toLowerCase().trim() },
       include: {
