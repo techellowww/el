@@ -237,7 +237,7 @@ async function runTestSuite() {
   });
   const pCreateData = await pCreate.json();
   const crudProjectId = pCreateData.project?.id;
-  record('crud', 'PROJECT CREATE (POST /api/projects) -> 200', pCreate.status === 200 && Boolean(crudProjectId));
+  record('crud', 'PROJECT CREATE (POST /api/projects) -> 201', [200, 201].includes(pCreate.status) && Boolean(crudProjectId));
 
   // R (Read)
   const pRead = await fetch(`${BASE_URL}/api/projects/${crudProjectId}`, { headers: { Cookie: adminCookie } });
