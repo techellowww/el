@@ -103,7 +103,10 @@ export async function POST(request: Request) {
     return response;
   } catch (error: any) {
     console.error('Login error:', error);
-    const errorMessage = error?.message || 'An unexpected server error occurred during login.';
+    let errorMessage = error?.message || 'An unexpected server error occurred during login.';
+    if (errorMessage.includes('does not exist') || errorMessage.includes('relation') || error?.code === 'P2021') {
+      errorMessage = 'Database tables have not been created yet. The next deployment will automatically create and seed all tables!';
+    }
     return NextResponse.json(
       {
         error: errorMessage,
