@@ -259,10 +259,19 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   }, [elapsedSeconds, activeTimer, user, screenshotSetting, isScreenSharing]);
 
 
+  const isPublicRoute =
+    pathname === '/login' ||
+    pathname === '/' ||
+    pathname.startsWith('/portal') ||
+    pathname.startsWith('/proposal/') ||
+    pathname.startsWith('/invoice/');
+
   // Real-time synchronization of agency branding (agency name & brand logo) for the sidebar
   useEffect(() => {
-    fetchBranding();
-  }, [fetchBranding]);
+    if (user) {
+      fetchBranding();
+    }
+  }, [user, fetchBranding]);
 
   // Periodic background check for automated email report dispatch
   useEffect(() => {
@@ -280,15 +289,16 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   // Initial user fetch (only once if not loaded)
   useEffect(() => {
     if (!user) {
+      if (isPublicRoute) return;
       fetchUser().then((u) => {
-        if (!u && pathname !== '/login' && pathname !== '/') {
+        if (!u && !isPublicRoute) {
           router.push('/login');
         } else if (u) {
           syncActiveTimer();
         }
       });
     }
-  }, [user, fetchUser, pathname, router, syncActiveTimer]);
+  }, [user, fetchUser, pathname, router, syncActiveTimer, isPublicRoute]);
 
   // Real-time 1s ticker for running timer
   useEffect(() => {
