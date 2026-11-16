@@ -3,8 +3,10 @@ import { getSessionUser } from '@/lib/auth/session';
 import { logAuditEvent } from '@/lib/server/audit';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = "force-dynamic";
+
 // Office Timings Route - auto-cutoff supported
-export async function GET() {
+export async function GET(request?: Request) {
   try {
     const schedule = await prisma.officeSchedule.findUnique({
       where: { id: 'default-schedule' },

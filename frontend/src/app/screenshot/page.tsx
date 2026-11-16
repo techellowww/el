@@ -153,7 +153,7 @@ export default function ScreenshotModulePage() {
 
   const loadEmployees = async () => {
     try {
-      const res = await fetch('/api/admin/employees');
+      const res = await fetch('/api/employees');
       if (res.ok) {
         const data = await res.json();
         setEmployeesList(data.employees || []);

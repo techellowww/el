@@ -30,7 +30,9 @@ function parseBackupNotice(rawNotice?: string | null) {
   return { notice, autoBackupEnabled, backupDrivePath };
 }
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export async function GET(request?: Request) {
   try {
     const rawSettings = await prisma.screenshotSetting.findUnique({
       where: { id: 'default-screenshot-setting' },

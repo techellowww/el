@@ -4,9 +4,11 @@ import { requireAdmin } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/settings (Admin only)
-export async function GET() {
-  const session = await getSessionUser();
+export async function GET(request?: Request) {
+  const session = await getSessionUser(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
