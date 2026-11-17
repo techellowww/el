@@ -103,11 +103,10 @@ export function TimePicker12h({
     onChange(updated);
   };
 
-  const selectPadding = size === 'sm' ? 'py-1.5 pl-2 pr-6 text-xs sm:text-sm' : 'py-2.5 px-3 text-sm';
+  const selectPadding = size === 'sm' ? 'py-1.5 px-1.5 text-xs sm:text-sm' : 'py-2 px-2.5 text-sm';
   const buttonPadding = size === 'sm' ? 'py-1 px-2.5 text-xs' : 'py-1.5 px-3 text-xs';
   const containerPadding = size === 'sm' ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
-  const fieldWidth = size === 'sm' ? 'w-[68px] sm:w-[74px] shrink-0' : 'flex-1';
-  const badgeClass = size === 'sm' ? 'right-1.5 sm:right-2 text-[9px] sm:text-[10px]' : 'right-2 text-[10px]';
+  const fieldWidth = size === 'sm' ? 'w-[52px] sm:w-[56px] shrink-0' : 'w-16 shrink-0';
 
   return (
     <div className="space-y-1.5" id={id} data-testid={dataTestId || id}>
@@ -133,8 +132,9 @@ export function TimePicker12h({
             value={hour12}
             disabled={disabled}
             onChange={(e) => handleHourChange(Number(e.target.value))}
-            className={`w-full ${selectPadding} bg-white border border-border rounded-xl font-semibold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center`}
+            className={`w-full ${selectPadding} bg-white border border-border rounded-xl font-bold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center`}
             aria-label={`${label || 'Time'} hour`}
+            title="Hour"
           >
             {HOURS.map((h) => (
               <option key={h} value={h}>
@@ -142,12 +142,9 @@ export function TimePicker12h({
               </option>
             ))}
           </select>
-          <span className={`absolute ${badgeClass} top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none font-medium`}>
-            HR
-          </span>
         </div>
 
-        <span className="font-bold text-slate-400 text-base sm:text-lg shrink-0">:</span>
+        <span className="font-bold text-slate-400 text-base sm:text-lg shrink-0 select-none">:</span>
 
         {/* Minute Selector */}
         <div className={`relative ${fieldWidth}`}>
@@ -157,8 +154,9 @@ export function TimePicker12h({
             value={minute}
             disabled={disabled}
             onChange={(e) => handleMinuteChange(e.target.value)}
-            className={`w-full ${selectPadding} bg-white border border-border rounded-xl font-semibold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center`}
+            className={`w-full ${selectPadding} bg-white border border-border rounded-xl font-bold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center`}
             aria-label={`${label || 'Time'} minute`}
+            title="Minute"
           >
             {MINUTES.map((m) => (
               <option key={m} value={m}>
@@ -166,13 +164,10 @@ export function TimePicker12h({
               </option>
             ))}
           </select>
-          <span className={`absolute ${badgeClass} top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none font-medium`}>
-            MIN
-          </span>
         </div>
 
         {/* AM / PM Segmented Control */}
-        <div className={`flex rounded-xl bg-slate-100 border border-border ${containerPadding} shrink-0`}>
+        <div className={`inline-flex rounded-xl bg-slate-100 border border-border ${containerPadding} shrink-0`}>
           <button
             type="button"
             id={id ? `${id}-am` : undefined}
@@ -181,7 +176,7 @@ export function TimePicker12h({
             onClick={() => handlePeriodChange('AM')}
             className={`${buttonPadding} rounded-lg font-bold transition-all cursor-pointer ${
               period === 'AM'
-                ? 'bg-white text-warning border border-amber-200 shadow-xs'
+                ? 'bg-white text-primary border border-slate-200/90 shadow-xs'
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
@@ -195,7 +190,7 @@ export function TimePicker12h({
             onClick={() => handlePeriodChange('PM')}
             className={`${buttonPadding} rounded-lg font-bold transition-all cursor-pointer ${
               period === 'PM'
-                ? 'bg-white text-primary border border-blue-200 shadow-xs'
+                ? 'bg-white text-primary border border-slate-200/90 shadow-xs'
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
