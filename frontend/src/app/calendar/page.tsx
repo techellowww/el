@@ -85,7 +85,11 @@ export default function CalendarPage() {
 
   const fetchMetadata = async () => {
     try {
-      const [cRes, pRes] = await Promise.all([fetch("/api/clients"), fetch("/api/projects")]);
+      const [cRes, pRes, eRes] = await Promise.all([
+        fetch("/api/clients"),
+        fetch("/api/projects"),
+        fetch("/api/employees"),
+      ]);
       if (cRes.ok) {
         const cData = await cRes.json();
         setClients(cData.clients || []);
@@ -94,13 +98,9 @@ export default function CalendarPage() {
         const pData = await pRes.json();
         setProjects(pData.projects || []);
       }
-
-      if (isAdmin) {
-        const eRes = await fetch("/api/employees");
-        if (eRes.ok) {
-          const eData = await eRes.json();
-          setEmployees(eData.employees || []);
-        }
+      if (eRes.ok) {
+        const eData = await eRes.json();
+        setEmployees(eData.employees || []);
       }
     } catch (err) {
       console.error("Failed to load metadata:", err);
@@ -110,7 +110,7 @@ export default function CalendarPage() {
   useEffect(() => {
     fetchEvents();
     fetchMetadata();
-  }, [isAdmin]);
+  }, []);
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,33 +130,32 @@ export default function CalendarPage() {
       const attendees: any[] = [];
       const seenEmails = new Set<string>();
 
-      // Add selected client
+      // Add selected client (email retrieved from Client module)
       if (clientId && inviteClient) {
         const client = clients.find((c) => c.id === clientId);
-        if (client?.email) {
-          const normEmail = client.email.trim().toLowerCase();
-          if (!seenEmails.has(normEmail)) {
-            seenEmails.add(normEmail);
-            attendees.push({
-              email: normEmail,
-              name: client.name,
-              isClient: true,
-            });
-          }
+        if (client) {
+          const normEmail = client.email ? client.email.trim().toLowerCase() : "";
+          if (normEmail) seenEmails.add(normEmail);
+          attendees.push({
+            clientId: client.id,
+            email: normEmail || undefined,
+            name: client.name,
+            isClient: true,
+          });
         }
       }
 
-      // Add selected employees
+      // Add selected employees (email retrieved from Employee module)
       for (const empId of selectedEmployeeIds) {
         const emp = employees.find((e) => e.id === empId);
-        if (emp?.email) {
-          const normEmail = emp.email.trim().toLowerCase();
-          if (!seenEmails.has(normEmail)) {
-            seenEmails.add(normEmail);
+        if (emp) {
+          const normEmail = emp.email ? emp.email.trim().toLowerCase() : "";
+          if (!normEmail || !seenEmails.has(normEmail)) {
+            if (normEmail) seenEmails.add(normEmail);
             attendees.push({
-              email: normEmail,
-              name: emp.name,
               userId: emp.id,
+              email: normEmail || undefined,
+              name: emp.name,
               isClient: false,
             });
           }

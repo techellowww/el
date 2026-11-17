@@ -63,13 +63,46 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { title, description, startTime, endTime, locationUrl, clientId, projectId, attendees } = body;
+    const {
+      title,
+      description,
+      startTime,
+      endTime,
+      locationUrl,
+      clientId,
+      projectId,
+      attendees,
+      selectedEmployeeIds,
+      employeeIds,
+      inviteClient,
+    } = body;
 
     if (!title || !startTime || !endTime) {
       return NextResponse.json(
         { error: "Event title, start time, and end time are required." },
         { status: 400 }
       );
+    }
+
+    const mergedAttendees: any[] = Array.isArray(attendees) ? [...attendees] : [];
+    const empIdsToInclude = Array.isArray(selectedEmployeeIds)
+      ? selectedEmployeeIds
+      : Array.isArray(employeeIds)
+      ? employeeIds
+      : [];
+
+    for (const empId of empIdsToInclude) {
+      if (!mergedAttendees.some((a) => a.userId === empId)) {
+        mergedAttendees.push({ userId: empId, isClient: false });
+      }
+    }
+
+    if (
+      clientId &&
+      (inviteClient === true || inviteClient === undefined) &&
+      !mergedAttendees.some((a) => a.isClient || a.clientId === clientId)
+    ) {
+      mergedAttendees.push({ clientId, isClient: true });
     }
 
     const result = await createCalendarEvent({
@@ -82,7 +115,7 @@ export async function POST(request: Request) {
       locationUrl,
       clientId: clientId || undefined,
       projectId: projectId || undefined,
-      attendees: Array.isArray(attendees) ? attendees : [],
+      attendees: mergedAttendees,
     });
 
     return NextResponse.json({

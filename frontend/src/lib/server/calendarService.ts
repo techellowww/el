@@ -45,9 +45,14 @@ export function generateIcsInvite(options: {
   const attendeeLines = options.attendees
     .map(
       (a) =>
-        `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;CN=${a.name || a.email}:mailto:${a.email}`
+        `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=${a.name || a.email}:mailto:${a.email}`
     )
     .join("\r\n");
+
+  const descriptionParts = [
+    options.description ? options.description.replace(/\n/g, "\\n") : "",
+    options.location ? `Meeting / Google Meet Link: ${options.location}` : "",
+  ].filter(Boolean);
 
   const ics = [
     "BEGIN:VCALENDAR",
@@ -61,8 +66,9 @@ export function generateIcsInvite(options: {
     `DTSTART:${dtStart}`,
     `DTEND:${dtEnd}`,
     `SUMMARY:${options.title.replace(/\n/g, " ")}`,
-    options.description ? `DESCRIPTION:${options.description.replace(/\n/g, "\\n")}` : "",
+    descriptionParts.length > 0 ? `DESCRIPTION:${descriptionParts.join("\\n\\n")}` : "",
     options.location ? `LOCATION:${options.location.replace(/\n/g, " ")}` : "",
+    options.location ? `URL:${options.location}` : "",
     `ORGANIZER;CN=${options.organizerName}:mailto:${options.organizerEmail}`,
     attendeeLines,
     "STATUS:CONFIRMED",
@@ -97,6 +103,16 @@ export async function createCalendarEvent(params: CreateEventParams) {
     select: { name: true, email: true },
   });
 
+  // Normalize meeting link / Google Meet link (ensure https:// for clickable web link)
+  let meetingLink = params.locationUrl?.trim() || null;
+  if (
+    meetingLink &&
+    !/^https?:\/\//i.test(meetingLink) &&
+    (meetingLink.includes(".") || meetingLink.toLowerCase().startsWith("meet.") || meetingLink.toLowerCase().startsWith("zoom."))
+  ) {
+    meetingLink = `https://${meetingLink}`;
+  }
+
   // Resolve attendee emails and details from existing user/client accounts & deduplicate
   const resolvedAttendees: Array<{
     email: string;
@@ -113,27 +129,54 @@ export async function createCalendarEvent(params: CreateEventParams) {
     let userId: string | null = raw.userId || null;
     let isClient = Boolean(raw.isClient);
 
-    // If userId is provided, look up existing user account to ensure official email and name
-    if (userId && !isClient) {
+    // 1. Client: retrieve official email address directly from Client module (Client model)
+    if (isClient || (raw as any).clientId) {
+      const cId = (raw as any).clientId || raw.userId || params.clientId;
+      if (cId) {
+        const clientRecord = await prisma.client.findFirst({
+          where: { id: cId, accountId: params.accountId },
+          select: { id: true, name: true, email: true },
+        });
+        if (clientRecord && clientRecord.email) {
+          email = clientRecord.email.trim().toLowerCase();
+          name = clientRecord.name || name;
+          isClient = true;
+          userId = null;
+        }
+      }
+    } else if (userId) {
+      // 2. Employee: retrieve official email address directly from Employee module (User model)
       const userRecord = await prisma.user.findFirst({
         where: { id: userId, accountId: params.accountId },
         select: { id: true, name: true, email: true },
       });
-      if (userRecord) {
+      if (userRecord && userRecord.email) {
         email = userRecord.email.trim().toLowerCase();
-        name = userRecord.name;
+        name = userRecord.name || name;
         userId = userRecord.id;
+        isClient = false;
       }
-    } else if (isClient || (params.clientId && !userId)) {
-      // Look up client account
+    } else if (email) {
+      // 3. Fallback: match by email against Client module or Employee module
       const clientRecord = await prisma.client.findFirst({
-        where: { id: params.clientId || (userId ? userId : undefined), accountId: params.accountId },
+        where: { email: { equals: email, mode: "insensitive" }, accountId: params.accountId },
         select: { id: true, name: true, email: true },
       });
-      if (clientRecord) {
+      if (clientRecord && clientRecord.email) {
         email = clientRecord.email.trim().toLowerCase();
-        name = clientRecord.name;
+        name = clientRecord.name || name;
         isClient = true;
+      } else {
+        const userRecord = await prisma.user.findFirst({
+          where: { email: { equals: email, mode: "insensitive" }, accountId: params.accountId },
+          select: { id: true, name: true, email: true },
+        });
+        if (userRecord && userRecord.email) {
+          email = userRecord.email.trim().toLowerCase();
+          name = userRecord.name || name;
+          userId = userRecord.id;
+          isClient = false;
+        }
       }
     }
 
@@ -159,7 +202,7 @@ export async function createCalendarEvent(params: CreateEventParams) {
       description: params.description?.trim() || null,
       startTime: start,
       endTime: end,
-      locationUrl: params.locationUrl?.trim() || null,
+      locationUrl: meetingLink || params.locationUrl?.trim() || null,
       clientId: params.clientId || null,
       projectId: params.projectId || null,
       attendees: {
@@ -186,7 +229,7 @@ export async function createCalendarEvent(params: CreateEventParams) {
     description: event.description,
     startTime: start,
     endTime: end,
-    location: event.locationUrl,
+    location: meetingLink || event.locationUrl,
     organizerName: creator?.name || account?.name || "ClientHub Agency",
     organizerEmail: account?.replyToEmail || creator?.email || "notifications@clienthub.local",
     attendees: resolvedAttendees,
@@ -232,16 +275,17 @@ export async function createCalendarEvent(params: CreateEventParams) {
       `You have been invited to a meeting scheduled by ${creator?.name || account?.name || "your agency"}.`,
       `<strong>Meeting Title:</strong> ${event.title}`,
       `<strong>Date:</strong> ${dateStr}`,
-      `<strong>Time:</strong> ${timeStartStr} – ${timeEndStr}`,
+      `<strong>Start Time:</strong> ${timeStartStr}`,
+      `<strong>End Time:</strong> ${timeEndStr}`,
     ];
 
     if (event.description?.trim()) {
-      lines.push(`<strong>Description:</strong> ${event.description.trim()}`);
+      lines.push(`<strong>Meeting Description:</strong> ${event.description.trim()}`);
     }
 
-    if (event.locationUrl?.trim()) {
+    if (meetingLink) {
       lines.push(
-        `<strong>Location / Meeting Link:</strong> <a href="${event.locationUrl.trim()}" target="_blank" rel="noopener noreferrer">${event.locationUrl.trim()}</a>`
+        `<strong>Meeting Link:</strong> <a href="${meetingLink}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline;">${meetingLink}</a>`
       );
     }
 
@@ -252,8 +296,8 @@ export async function createCalendarEvent(params: CreateEventParams) {
       agencyLogoUrl: account?.logoUrl,
       heading: `Meeting Invitation: ${event.title}`,
       messageLines: lines,
-      buttonText: event.locationUrl ? "Join Meeting" : undefined,
-      buttonUrl: event.locationUrl || undefined,
+      buttonText: meetingLink ? "Join Meeting / Google Meet" : undefined,
+      buttonUrl: meetingLink || undefined,
     });
 
     // Record notification in database
@@ -269,7 +313,7 @@ export async function createCalendarEvent(params: CreateEventParams) {
           title: event.title,
           startTime: start.toISOString(),
           endTime: end.toISOString(),
-          locationUrl: event.locationUrl,
+          locationUrl: meetingLink || event.locationUrl,
         }),
         status: "QUEUED",
       },
