@@ -36,6 +36,13 @@ export async function GET(request?: Request) {
           name: true,
           company: true,
           email: true,
+          notes: true,
+          assignments: {
+            select: {
+              userId: true,
+              user: { select: { id: true, name: true, email: true, role: true } },
+            },
+          },
         },
       },
       statusUpdates: {

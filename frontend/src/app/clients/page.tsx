@@ -34,6 +34,7 @@ export default function ClientsPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [chatLink, setChatLink] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [createdResult, setCreatedResult] = useState<any | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -46,6 +47,7 @@ export default function ClientsPage() {
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editChatLink, setEditChatLink] = useState("");
   const [editUserIds, setEditUserIds] = useState<string[]>([]);
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
@@ -63,6 +65,7 @@ export default function ClientsPage() {
     setEmail("");
     setPhone("");
     setNotes("");
+    setChatLink("");
     setSelectedUserIds([]);
     setCreatedResult(null);
     setCreateError(null);
@@ -80,6 +83,7 @@ export default function ClientsPage() {
     setEditEmail("");
     setEditPhone("");
     setEditNotes("");
+    setEditChatLink("");
     setEditUserIds([]);
     setUpdateError(null);
   };
@@ -132,6 +136,7 @@ export default function ClientsPage() {
           email,
           phone,
           notes,
+          chatLink: chatLink.trim() || undefined,
           assignedUserIds: selectedUserIds,
         }),
       });
@@ -157,6 +162,7 @@ export default function ClientsPage() {
     setEditEmail(client.email || "");
     setEditPhone(client.phone || "");
     setEditNotes(client.notes || "");
+    setEditChatLink(client.chatLink || "");
     setEditUserIds(
       client.assignments?.map((a: any) => a.user?.id || a.userId).filter(Boolean) || []
     );
@@ -179,6 +185,7 @@ export default function ClientsPage() {
           email: editEmail,
           phone: editPhone,
           notes: editNotes,
+          chatLink: editChatLink.trim() || undefined,
           assignedUserIds: editUserIds,
         }),
       });
@@ -348,6 +355,20 @@ export default function ClientsPage() {
                       <div className="flex items-center gap-2">
                         <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span>{c.phone}</span>
+                      </div>
+                    )}
+                    {c.chatLink && (
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <a
+                          href={c.chatLink.startsWith("http") ? c.chatLink : `https://${c.chatLink}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline truncate"
+                          title={c.chatLink}
+                        >
+                          {c.chatLink}
+                        </a>
                       </div>
                     )}
                   </div>
@@ -543,6 +564,19 @@ export default function ClientsPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="block label-text text-text-primary font-medium mb-1.5">
+                    Client Chat Link
+                  </label>
+                  <input
+                    type="url"
+                    value={chatLink}
+                    onChange={(e) => setChatLink(e.target.value)}
+                    placeholder="e.g. https://chat.clientdomain.com or Slack/Discord channel link"
+                    className="w-full px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
                 {employees.length > 0 && (
                   <div>
                     <label className="block label-text text-text-primary font-medium mb-1.5">
@@ -689,6 +723,19 @@ export default function ClientsPage() {
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
                   placeholder="Key requirements, retainer details, or contact preferences"
+                  className="w-full px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block label-text text-text-primary font-medium mb-1.5">
+                  Client Chat Link
+                </label>
+                <input
+                  type="url"
+                  value={editChatLink}
+                  onChange={(e) => setEditChatLink(e.target.value)}
+                  placeholder="e.g. https://chat.clientdomain.com or Slack/Discord channel link"
                   className="w-full px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 />
               </div>

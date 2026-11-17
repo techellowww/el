@@ -4,6 +4,13 @@ import { getAccessibleClients, requireAdmin } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
 import { generateSecureToken, hashToken } from "@/lib/auth/token";
 
+export function extractClientChatLink(c: any): string | null {
+  if (c?.chatLink) return c.chatLink;
+  if (!c?.notes) return null;
+  const match = c.notes.match(/(?:\[Chat Link\]|Chat Link|chatLink):\s*(https?:\/\/\S+|\S+)/i);
+  return match ? match[1].trim() : null;
+}
+
 // GET /api/clients
 // Admin sees all clients in account, Employee sees only assigned clients
 export async function GET(request: Request) {
@@ -13,7 +20,11 @@ export async function GET(request: Request) {
   }
 
   const clients = await getAccessibleClients(session);
-  return NextResponse.json({ clients });
+  const enrichedClients = clients.map((c: any) => ({
+    ...c,
+    chatLink: (c as any).chatLink || extractClientChatLink(c),
+  }));
+  return NextResponse.json({ clients: enrichedClients });
 }
 
 // POST /api/clients (Admin only)
@@ -31,7 +42,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, company, email, phone, notes, assignedUserIds } = body;
+    const { name, company, email, phone, notes, chatLink, assignedUserIds } = body;
 
     if (company === "__INTERNAL_GENERAL_TEAM__") {
       return NextResponse.json(
@@ -51,6 +62,12 @@ export async function POST(request: Request) {
     const rawPortalToken = "ch_live_" + generateSecureToken(32);
     const tokenHash = hashToken(rawPortalToken);
 
+    let storedNotes = notes ? notes.trim() : "";
+    if (chatLink && typeof chatLink === "string" && chatLink.trim()) {
+      const linkTag = `[Chat Link]: ${chatLink.trim()}`;
+      storedNotes = storedNotes ? `${storedNotes}\n${linkTag}` : linkTag;
+    }
+
     const client = await prisma.client.create({
       data: {
         accountId: session.accountId,
@@ -58,7 +75,7 @@ export async function POST(request: Request) {
         company: company || null,
         email,
         phone: phone || null,
-        notes: notes || null,
+        notes: storedNotes || null,
         portalTokenHash: tokenHash,
         portalTokenExpiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000), // 180 days
         assignments: {
@@ -79,6 +96,16 @@ export async function POST(request: Request) {
       },
     });
 
+    if (chatLink && typeof chatLink === "string" && chatLink.trim()) {
+      try {
+        await prisma.$executeRawUnsafe(
+          'UPDATE ch_clients SET "chatLink" = $1 WHERE id = $2',
+          chatLink.trim(),
+          client.id
+        );
+      } catch {}
+    }
+
     // Write audit log
     await prisma.auditLog.create({
       data: {
@@ -92,7 +119,10 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      client,
+      client: {
+        ...client,
+        chatLink: chatLink?.trim() || null,
+      },
       rawPortalToken, // Returned once upon creation so admin can copy the client link
       portalUrl: `/portal/${rawPortalToken}`,
     });

@@ -34,7 +34,18 @@ export async function GET(
       },
     });
 
-    return NextResponse.json({ client: fullClient });
+    let chatLink = (fullClient as any)?.chatLink || null;
+    if (!chatLink && fullClient?.notes) {
+      const match = fullClient.notes.match(/(?:\[Chat Link\]|Chat Link|chatLink):\s*(https?:\/\/\S+|\S+)/i);
+      if (match) chatLink = match[1].trim();
+    }
+
+    return NextResponse.json({
+      client: {
+        ...fullClient,
+        chatLink,
+      },
+    });
   } catch (error: any) {
     if (error instanceof NotFoundError || error.statusCode === 404) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -63,13 +74,24 @@ export async function PATCH(
   try {
     await requireClientAccess(session, id);
     const body = await request.json();
-    const { name, company, email, phone, notes, assignedUserIds } = body;
+    const { name, company, email, phone, notes, chatLink, assignedUserIds } = body;
 
     if (name !== undefined && !name.trim()) {
       return NextResponse.json({ error: "Client name is required" }, { status: 400 });
     }
     if (email !== undefined && !email.trim()) {
       return NextResponse.json({ error: "Client email is required" }, { status: 400 });
+    }
+
+    let updatedNotes = notes !== undefined ? (notes?.trim() || "") : undefined;
+    if (chatLink !== undefined) {
+      if (updatedNotes !== undefined) {
+        updatedNotes = updatedNotes.replace(/(?:\r?\n)?\[Chat Link\]:.*$/im, "").trim();
+        if (chatLink?.trim()) {
+          const linkTag = `[Chat Link]: ${chatLink.trim()}`;
+          updatedNotes = updatedNotes ? `${updatedNotes}\n${linkTag}` : linkTag;
+        }
+      }
     }
 
     const updated = await prisma.$transaction(async (tx: any) => {
@@ -97,7 +119,7 @@ export async function PATCH(
           company: company !== undefined ? company?.trim() || null : undefined,
           email: email !== undefined ? email.trim() : undefined,
           phone: phone !== undefined ? phone?.trim() || null : undefined,
-          notes: notes !== undefined ? notes?.trim() || null : undefined,
+          notes: updatedNotes !== undefined ? updatedNotes || null : undefined,
         },
         include: {
           assignments: {
@@ -125,7 +147,22 @@ export async function PATCH(
       return client;
     });
 
-    return NextResponse.json({ client: updated });
+    if (chatLink !== undefined) {
+      try {
+        await prisma.$executeRawUnsafe(
+          'UPDATE ch_clients SET "chatLink" = $1 WHERE id = $2',
+          chatLink?.trim() || null,
+          id
+        );
+      } catch {}
+    }
+
+    return NextResponse.json({
+      client: {
+        ...updated,
+        chatLink: chatLink !== undefined ? (chatLink?.trim() || null) : ((updated as any).chatLink || null),
+      },
+    });
   } catch (error: any) {
     if (error instanceof NotFoundError || error.statusCode === 404) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });

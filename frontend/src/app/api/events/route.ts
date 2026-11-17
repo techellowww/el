@@ -84,6 +84,15 @@ export async function POST(request: Request) {
       );
     }
 
+    // Requirement: Assigned user / employee creates meeting -> Project is mandatory
+    if (session.role === "EMPLOYEE" && !projectId) {
+      return NextResponse.json(
+        { error: "Project selection is mandatory when creating a meeting." },
+        { status: 400 }
+      );
+    }
+
+    let effectiveClientId = clientId || null;
     const mergedAttendees: any[] = Array.isArray(attendees) ? [...attendees] : [];
     const empIdsToInclude = Array.isArray(selectedEmployeeIds)
       ? selectedEmployeeIds
@@ -97,12 +106,68 @@ export async function POST(request: Request) {
       }
     }
 
+    // Auto-identify project client and assigned users when a project is selected
+    if (projectId) {
+      const projectRecord = await prisma.project.findFirst({
+        where: { id: projectId, accountId: session.accountId },
+        include: {
+          client: {
+            include: {
+              assignments: {
+                select: { userId: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (!projectRecord) {
+        return NextResponse.json(
+          { error: "Selected project was not found." },
+          { status: 404 }
+        );
+      }
+
+      // Check permission for employee: must be assigned to this project's client
+      if (session.role === "EMPLOYEE") {
+        const isAssigned = projectRecord.client?.assignments?.some(
+          (a: any) => a.userId === session.userId
+        );
+        if (!isAssigned) {
+          return NextResponse.json(
+            { error: "Forbidden: You are not assigned to this project." },
+            { status: 403 }
+          );
+        }
+      }
+
+      // Auto-identify client associated with that project
+      if (projectRecord.clientId) {
+        effectiveClientId = projectRecord.clientId;
+      }
+
+      // Auto-identify and auto-select assigned users for that project
+      if (projectRecord.client?.assignments) {
+        for (const assign of projectRecord.client.assignments) {
+          if (assign.userId && !mergedAttendees.some((a) => a.userId === assign.userId)) {
+            mergedAttendees.push({ userId: assign.userId, isClient: false });
+          }
+        }
+      }
+    }
+
+    // Auto-include client in attendees
     if (
-      clientId &&
+      effectiveClientId &&
       (inviteClient === true || inviteClient === undefined) &&
-      !mergedAttendees.some((a) => a.isClient || a.clientId === clientId)
+      !mergedAttendees.some((a) => a.isClient || a.clientId === effectiveClientId)
     ) {
-      mergedAttendees.push({ clientId, isClient: true });
+      mergedAttendees.push({ clientId: effectiveClientId, isClient: true });
+    }
+
+    // Ensure meeting creator is included in attendees
+    if (!mergedAttendees.some((a) => a.userId === session.userId)) {
+      mergedAttendees.push({ userId: session.userId, isClient: false });
     }
 
     const result = await createCalendarEvent({
@@ -113,7 +178,7 @@ export async function POST(request: Request) {
       startTime,
       endTime,
       locationUrl,
-      clientId: clientId || undefined,
+      clientId: effectiveClientId || undefined,
       projectId: projectId || undefined,
       attendees: mergedAttendees,
     });

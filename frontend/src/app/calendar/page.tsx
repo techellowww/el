@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuthStore } from "@/lib/store";
+import { TimePicker12h } from "@/components/TimePicker12h";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -112,10 +113,46 @@ export default function CalendarPage() {
     fetchMetadata();
   }, []);
 
+  const handleClientChange = (selectedClientId: string) => {
+    setClientId(selectedClientId);
+    if (projectId) {
+      const currentProj = projects.find((p) => p.id === projectId);
+      if (currentProj && currentProj.clientId !== selectedClientId) {
+        setProjectId("");
+      }
+    }
+  };
+
+  const handleProjectChange = (selectedProjId: string) => {
+    setProjectId(selectedProjId);
+    if (!selectedProjId) return;
+
+    const proj = projects.find((p) => p.id === selectedProjId);
+    if (proj) {
+      if (proj.clientId) {
+        setClientId(proj.clientId);
+      }
+      // Automatically identify and select users assigned to that project
+      const assignedIds = (proj.client?.assignments || [])
+        .map((a: any) => a.userId || a.user?.id)
+        .filter(Boolean);
+
+      if (assignedIds.length > 0) {
+        setSelectedEmployeeIds((prev) => Array.from(new Set([...prev, ...assignedIds])));
+      }
+    }
+  };
+
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !startDate || !endDate) {
       setErrorMsg("Title, start date, and end date are required.");
+      return;
+    }
+
+    // Requirement: Assigned user / employee creates meeting -> Project is required
+    if (!isAdmin && !projectId) {
+      setErrorMsg("Project selection is mandatory when creating a meeting.");
       return;
     }
 
@@ -308,8 +345,8 @@ export default function CalendarPage() {
                       <Clock className="w-3.5 h-3.5 text-primary" />
                       <span>
                         {start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} •{" "}
-                        {start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} -{" "}
-                        {end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })} -{" "}
+                        {end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })}
                       </span>
                     </div>
 
@@ -399,7 +436,7 @@ export default function CalendarPage() {
                   <label className="block text-xs font-medium text-text-secondary mb-1">Client</label>
                   <select
                     value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
+                    onChange={(e) => handleClientChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-border bg-white text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="">None / Internal Event</option>
@@ -412,13 +449,16 @@ export default function CalendarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1">Project</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">
+                    Project {!isAdmin && <span className="text-red-500 font-bold">*</span>}
+                  </label>
                   <select
                     value={projectId}
-                    onChange={(e) => setProjectId(e.target.value)}
+                    onChange={(e) => handleProjectChange(e.target.value)}
+                    required={!isAdmin}
                     className="w-full px-3 py-2 rounded-xl border border-border bg-white text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
-                    <option value="">None</option>
+                    <option value="">{isAdmin ? "None" : "Select Project (Required)"}</option>
                     {projects
                       .filter((p) => !clientId || p.clientId === clientId)
                       .map((p) => (
@@ -443,12 +483,10 @@ export default function CalendarPage() {
                     required
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border text-xs text-text-primary mb-1.5"
                   />
-                  <input
-                    type="time"
+                  <TimePicker12h
                     value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    required
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-border text-xs text-text-primary"
+                    onChange={setStartTime}
+                    size="sm"
                   />
                 </div>
 
@@ -461,12 +499,10 @@ export default function CalendarPage() {
                     required
                     className="w-full px-2.5 py-1.5 rounded-lg border border-border text-xs text-text-primary mb-1.5"
                   />
-                  <input
-                    type="time"
+                  <TimePicker12h
                     value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    required
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-border text-xs text-text-primary"
+                    onChange={setEndTime}
+                    size="sm"
                   />
                 </div>
               </div>
