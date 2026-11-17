@@ -69,7 +69,14 @@ export function extractTokenFromRequest(request: Request): string | null {
  * Authenticates the user from the incoming request and verifies account status against DB.
  */
 export async function getAuthUser(request: Request): Promise<AuthUser | null> {
-  const token = extractTokenFromRequest(request);
+  let token = extractTokenFromRequest(request);
+  if (!token) {
+    try {
+      const { cookies } = await import('next/headers');
+      const cookieStore = await cookies();
+      token = cookieStore.get('ch_session')?.value || cookieStore.get('el_token')?.value || null;
+    } catch {}
+  }
   if (!token) return null;
 
   const decoded = verifyToken(token) as any;

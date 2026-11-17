@@ -122,22 +122,97 @@ export function ChatDrawer() {
     }
   }, [totalUnreadCount]);
 
-  // When drawer opens, mark active conversation as viewed
-  useEffect(() => {
-    if (isOpen && activeConvId) {
-      clearUnreadForConv(activeConvId);
-      socketRef.current?.emit('mark_read', { conversationId: activeConvId });
+  // Mark conversation read helper
+  const markConversationRead = useCallback((convId: string) => {
+    if (!convId) return;
+    clearUnreadForConv(convId);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('mark_read', { conversationId: convId });
     }
-  }, [isOpen, activeConvId, clearUnreadForConv]);
+    fetch('/api/chat/unread', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId: convId }),
+    }).catch(() => {});
+  }, [clearUnreadForConv]);
+
+  // Fetch conversations list via HTTP API (guarantees conversations load on serverless / Vercel)
+  const fetchConversationsHttp = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/chat/conversations');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.conversations)) {
+        setConversations(data.conversations);
+
+        const counts: Record<string, number> = {};
+        data.conversations.forEach((c: any) => {
+          if (isOpenRef.current && activeConvIdRef.current === c.id) {
+            counts[c.id] = 0;
+          } else {
+            counts[c.id] = c.unreadCount || 0;
+          }
+        });
+        setAllUnreadCounts(counts);
+
+        // Auto-select conversation if none selected or if unread conversation exists
+        if (data.conversations.length > 0) {
+          const currentId = activeConvIdRef.current;
+          const exists = data.conversations.some((c: any) => c.id === currentId);
+          const unreadConv = data.conversations.find((c: any) => (c.unreadCount || 0) > 0);
+
+          if (!currentId || !exists) {
+            const nextId = unreadConv ? unreadConv.id : data.conversations[0].id;
+            setActiveConvId(nextId);
+          } else if (unreadConv && currentId === 'general' && unreadConv.id !== 'general') {
+            const genConv = data.conversations.find((c: any) => c.id === 'general');
+            if (!genConv || (genConv.unreadCount || 0) === 0) {
+              setActiveConvId(unreadConv.id);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Chat HTTP conversations fetch error]:', err);
+    }
+  }, [user, setAllUnreadCounts, setActiveConvId]);
+
+  // Fetch messages for active conversation via HTTP API
+  const fetchMessagesHttp = useCallback(async (convId: string) => {
+    if (!user || !convId) return;
+    try {
+      const res = await fetch(`/api/chat/messages?conversationId=${encodeURIComponent(convId)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.messages)) {
+        if (activeConvIdRef.current === convId) {
+          setMessages(data.messages);
+        }
+      }
+    } catch (err) {
+      console.warn('[Chat HTTP messages fetch error]:', err);
+    }
+  }, [user]);
+
+  // When drawer opens, fetch latest conversations and messages for active channel, and mark as read
+  useEffect(() => {
+    if (isOpen) {
+      fetchConversationsHttp();
+      if (activeConvId) {
+        fetchMessagesHttp(activeConvId);
+        markConversationRead(activeConvId);
+      }
+    }
+  }, [isOpen, activeConvId, fetchConversationsHttp, fetchMessagesHttp, markConversationRead]);
 
   // Sync on window focus / visibility change: if drawer is open on active conversation, mark as read
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const handleFocus = () => {
-      if (isOpenRef.current && activeConvIdRef.current && socketRef.current?.connected) {
-        clearUnreadForConv(activeConvIdRef.current);
-        socketRef.current.emit('mark_read', { conversationId: activeConvIdRef.current });
+      if (isOpenRef.current && activeConvIdRef.current) {
+        markConversationRead(activeConvIdRef.current);
       }
     };
 
@@ -148,9 +223,9 @@ export function ChatDrawer() {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleFocus);
     };
-  }, [clearUnreadForConv]);
+  }, [markConversationRead]);
 
-  // Periodic fallback sync with /api/chat/unread to catch client-portal messages and maintain exact count
+  // Periodic fallback sync with /api/chat/unread & conversations to keep unread badges and messages up-to-date
   useEffect(() => {
     if (!user) return;
 
@@ -173,14 +248,34 @@ export function ChatDrawer() {
 
     // Initial sync
     fetchUnreadCounts();
+    fetchConversationsHttp();
 
     // Sync every 15 seconds
-    const interval = setInterval(fetchUnreadCounts, 15000);
+    const interval = setInterval(() => {
+      fetchUnreadCounts();
+      if (isOpenRef.current) {
+        fetchConversationsHttp();
+      }
+    }, 15000);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [user, setAllUnreadCounts]);
+  }, [user, setAllUnreadCounts, fetchConversationsHttp]);
+
+  // Polling for messages when drawer is open and WebSocket is disconnected (serverless fallback)
+  useEffect(() => {
+    if (!isOpen || !activeConvId) return;
+
+    const interval = setInterval(() => {
+      if (!socketRef.current?.connected && isOpenRef.current && activeConvIdRef.current) {
+        fetchMessagesHttp(activeConvIdRef.current);
+      }
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [isOpen, activeConvId, fetchMessagesHttp]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -402,30 +497,35 @@ export function ChatDrawer() {
     };
   }, [connectSocket]);
 
-  // When active conversation changes, join room and mark as viewed
+  // When active conversation changes, join room, load messages, and mark as viewed
   useEffect(() => {
-    if (!socketRef.current || !activeConvId) return;
+    if (!activeConvId) return;
 
     // Clear previous channel messages immediately to prevent cross-channel bleed
     setMessages([]);
 
-    socketRef.current.emit('join_room', { conversationId: activeConvId }, (res: any) => {
-      if (res?.success && res.messages) {
-        setMessages(res.messages);
-      }
-    });
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('join_room', { conversationId: activeConvId }, (res: any) => {
+        if (res?.success && res.messages) {
+          setMessages(res.messages);
+        }
+      });
+    }
+
+    // Always fetch messages via HTTP to ensure message history is loaded regardless of socket connection
+    fetchMessagesHttp(activeConvId);
 
     if (isOpenRef.current) {
-      clearUnreadForConv(activeConvId);
-      socketRef.current.emit('mark_read', { conversationId: activeConvId });
+      markConversationRead(activeConvId);
     }
 
     setTypingUsers({});
-  }, [activeConvId, clearUnreadForConv]);
+  }, [activeConvId, fetchMessagesHttp, markConversationRead]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputContent.trim() || !activeConvId || !socketRef.current) return;
+    const content = inputContent.trim();
+    if (!content || !activeConvId) return;
 
     // Staff/Employee check: ensure staff can only send to assigned client channels or general
     if (user?.role === 'EMPLOYEE' && activeConvId !== 'general') {
@@ -433,17 +533,53 @@ export function ChatDrawer() {
       if (!isPermitted) return;
     }
 
-    socketRef.current.emit('send_message', {
-      conversationId: activeConvId,
-      content: inputContent.trim(),
-    });
-
     setInputContent('');
-    // Stop typing indicator
-    socketRef.current.emit('typing', {
-      conversationId: activeConvId,
-      isTyping: false,
-    });
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('send_message', {
+        conversationId: activeConvId,
+        content,
+      });
+
+      // Stop typing indicator
+      socketRef.current.emit('typing', {
+        conversationId: activeConvId,
+        isTyping: false,
+      });
+    } else {
+      // HTTP fallback for serverless deployments
+      try {
+        const res = await fetch('/api/chat/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversationId: activeConvId,
+            content,
+          }),
+        });
+        const data = await res.json();
+        if (data?.success && data.message) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === data.message.id)) return prev;
+            return [...prev, data.message];
+          });
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === activeConvId
+                ? {
+                    ...c,
+                    lastMessage: data.message,
+                    totalMessages: c.totalMessages + 1,
+                    updatedAt: data.message.createdAt,
+                  }
+                : c
+            )
+          );
+        }
+      } catch (err) {
+        console.error('[Chat send message error]:', err);
+      }
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -465,20 +601,51 @@ export function ChatDrawer() {
     }, 2000);
   };
 
-  const handleSaveEdit = (messageId: string) => {
-    if (!editContent.trim() || !socketRef.current) return;
-    socketRef.current.emit('edit_message', {
-      messageId,
-      newContent: editContent.trim(),
-    });
+  const handleSaveEdit = async (messageId: string) => {
+    const trimmed = editContent.trim();
+    if (!trimmed) return;
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('edit_message', {
+        messageId,
+        newContent: trimmed,
+      });
+    } else {
+      try {
+        const res = await fetch('/api/chat/messages', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageId, newContent: trimmed }),
+        });
+        if (res.ok) {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === messageId ? { ...m, content: trimmed, message: trimmed, isEdited: true } : m))
+          );
+        }
+      } catch (err) {
+        console.error('[Chat edit message error]:', err);
+      }
+    }
     setEditingMessageId(null);
     setEditContent('');
   };
 
-  const handleDeleteMessage = (messageId: string) => {
-    if (!socketRef.current) return;
-    if (confirm('Delete this message for everyone?')) {
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!confirm('Delete this message for everyone?')) return;
+
+    if (socketRef.current?.connected) {
       socketRef.current.emit('delete_message', { messageId });
+    } else {
+      try {
+        const res = await fetch(`/api/chat/messages?messageId=${encodeURIComponent(messageId)}`, {
+          method: 'DELETE',
+        });
+        if (res.ok) {
+          setMessages((prev) => prev.filter((m) => m.id !== messageId));
+        }
+      } catch (err) {
+        console.error('[Chat delete message error]:', err);
+      }
     }
   };
 
@@ -519,24 +686,30 @@ export function ChatDrawer() {
               <div>
                 <h3 className="font-bold text-text-primary text-sm leading-tight flex items-center gap-2">
                   <span>Real-time Workspace Chat</span>
-                  <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-success' : 'bg-warning animate-pulse'}`} />
+                  <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-success' : 'bg-emerald-500'}`} />
                 </h3>
                 <p className="text-[11px] text-text-secondary">
-                  {isConnected ? 'Connected to dedicated chat server' : isConnecting ? 'Connecting...' : 'Disconnected (Click retry)'}
+                  {isConnected
+                    ? 'Connected to dedicated chat server'
+                    : isConnecting
+                    ? 'Connecting...'
+                    : 'Active Workspace Chat (Cloud Sync)'}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              {!isConnected && (
-                <button
-                  onClick={() => connectSocket()}
-                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-text-secondary hover:text-text-primary transition"
-                  title="Reconnect to chat server"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  connectSocket();
+                  fetchConversationsHttp();
+                  if (activeConvId) fetchMessagesHttp(activeConvId);
+                }}
+                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-text-secondary hover:text-text-primary transition"
+                title="Refresh chat"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
 
               <button
                 onClick={() => setShowPresence((prev) => !prev)}
@@ -544,7 +717,7 @@ export function ChatDrawer() {
                 title="View Online Members"
               >
                 <Users className="w-3.5 h-3.5 text-success" />
-                <span>{onlineUsers.length} Online</span>
+                <span>{onlineUsers.length > 0 ? onlineUsers.length : 1} Online</span>
               </button>
 
               <button
@@ -599,8 +772,8 @@ export function ChatDrawer() {
                   data-testid={`channel-pill-${conv.id}`}
                   onClick={() => {
                     setActiveConvId(conv.id);
-                    clearUnreadForConv(conv.id);
-                    socketRef.current?.emit('mark_read', { conversationId: conv.id });
+                    markConversationRead(conv.id);
+                    fetchMessagesHttp(conv.id);
                   }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer relative ${
                     isActive
@@ -804,12 +977,12 @@ export function ChatDrawer() {
                     ? `Message ${activeConv.name || activeConv.title}...`
                     : 'Select a channel to chat...'
                 }
-                disabled={!isConnected || !activeConvId}
+                disabled={!activeConvId}
                 className="flex-1 bg-slate-50 border border-border rounded-xl px-4 py-2.5 text-xs text-text-primary placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50"
               />
               <button
                 type="submit"
-                disabled={!inputContent.trim() || !isConnected || !activeConvId}
+                disabled={!inputContent.trim() || !activeConvId}
                 className="w-10 h-10 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-50 text-white flex items-center justify-center transition shadow-sm cursor-pointer shrink-0"
               >
                 <Send className="w-4 h-4" />
@@ -979,9 +1152,8 @@ export function FloatingChatButton() {
         </span>
       ) : (
         <span
-          className="w-2 h-2 rounded-full"
-          style={{ backgroundColor: isConnected ? '#22c55e' : '#f59e0b' }}
-          title={isConnected ? 'Chat Connected' : 'Connecting'}
+          className="w-2 h-2 rounded-full bg-emerald-500"
+          title={isConnected ? 'Chat Connected' : 'Chat Active'}
         />
       )}
     </button>
