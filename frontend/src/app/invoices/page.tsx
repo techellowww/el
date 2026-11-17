@@ -63,6 +63,20 @@ export default function InvoicesPage() {
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
   const [invoiceToDelete, setInvoiceToDelete] = useState<any | null>(null);
 
+  const resetCreateForm = () => {
+    setSelectedClientId("");
+    setSelectedProjectId("");
+    setDueDate("");
+    setNotes("");
+    setItems([{ description: "Website Development Sprint", quantity: 1, unitPriceCents: 150000 }]);
+    setCreateError(null);
+  };
+
+  const handleCloseCreateModal = () => {
+    setShowCreateModal(false);
+    resetCreateForm();
+  };
+
   // Bulk Selection States
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
@@ -190,12 +204,7 @@ export default function InvoicesPage() {
         throw new Error(data.error || "Failed to create invoice");
       }
 
-      setShowCreateModal(false);
-      setSelectedClientId("");
-      setSelectedProjectId("");
-      setDueDate("");
-      setNotes("");
-      setItems([{ description: "Website Development Sprint", quantity: 1, unitPriceCents: 150000 }]);
+      handleCloseCreateModal();
       fetchInvoices();
     } catch (err: any) {
       setCreateError(err.message || "Failed to create invoice");
@@ -387,7 +396,10 @@ export default function InvoicesPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => {
+            resetCreateForm();
+            setShowCreateModal(true);
+          }}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-sm transition cursor-pointer"
         >
           <Plus className="w-4 h-4" />
@@ -659,12 +671,21 @@ export default function InvoicesPage() {
 
       {/* Create Invoice Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl space-y-5 my-8">
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submitting) handleCloseCreateModal();
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl space-y-5 my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-lg font-bold text-text-primary">Create New Invoice</h3>
               <button
-                onClick={() => setShowCreateModal(false)}
+                type="button"
+                onClick={handleCloseCreateModal}
                 className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -825,7 +846,7 @@ export default function InvoicesPage() {
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={handleCloseCreateModal}
                   className="px-4 py-2 rounded-xl border border-border text-xs font-medium text-slate-700 hover:bg-slate-50 transition cursor-pointer"
                 >
                   Cancel

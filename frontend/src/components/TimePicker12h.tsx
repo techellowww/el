@@ -10,6 +10,8 @@ interface TimePicker12hProps {
   description?: string;
   disabled?: boolean;
   id?: string;
+  dataTestId?: string;
+  size?: 'default' | 'sm';
 }
 
 /**
@@ -72,7 +74,7 @@ export function format24hTo12h(time24: string): string {
 }
 
 const HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-const MINUTES = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
+const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
 
 export function TimePicker12h({
   value,
@@ -81,6 +83,8 @@ export function TimePicker12h({
   description,
   disabled = false,
   id,
+  dataTestId,
+  size = 'default',
 }: TimePicker12hProps) {
   const { hour12, minute, period } = parse24hTo12h(value);
 
@@ -99,8 +103,14 @@ export function TimePicker12h({
     onChange(updated);
   };
 
+  const selectPadding = size === 'sm' ? 'py-1.5 pl-2 pr-6 text-xs sm:text-sm' : 'py-2.5 px-3 text-sm';
+  const buttonPadding = size === 'sm' ? 'py-1 px-2.5 text-xs' : 'py-1.5 px-3 text-xs';
+  const containerPadding = size === 'sm' ? 'p-0.5 gap-0.5' : 'p-1 gap-1';
+  const fieldWidth = size === 'sm' ? 'w-[68px] sm:w-[74px] shrink-0' : 'flex-1';
+  const badgeClass = size === 'sm' ? 'right-1.5 sm:right-2 text-[9px] sm:text-[10px]' : 'right-2 text-[10px]';
+
   return (
-    <div className="space-y-1.5" id={id}>
+    <div className="space-y-1.5" id={id} data-testid={dataTestId || id}>
       {label && (
         <div className="flex items-center justify-between">
           <label className="block text-xs font-semibold text-text-primary uppercase tracking-wider">
@@ -114,14 +124,16 @@ export function TimePicker12h({
       )}
 
       {/* Control Row: Hour, Minute, AM/PM Toggle */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Hour Selector */}
-        <div className="relative flex-1">
+        <div className={`relative ${fieldWidth}`}>
           <select
+            id={id ? `${id}-hour` : undefined}
+            data-testid={id ? `${id}-hour` : undefined}
             value={hour12}
             disabled={disabled}
             onChange={(e) => handleHourChange(Number(e.target.value))}
-            className="w-full py-2.5 px-3 bg-white border border-border rounded-xl text-sm font-semibold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center"
+            className={`w-full ${selectPadding} bg-white border border-border rounded-xl font-semibold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center`}
             aria-label={`${label || 'Time'} hour`}
           >
             {HOURS.map((h) => (
@@ -130,24 +142,22 @@ export function TimePicker12h({
               </option>
             ))}
           </select>
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary pointer-events-none">
+          <span className={`absolute ${badgeClass} top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none font-medium`}>
             HR
           </span>
         </div>
 
-        <span className="font-bold text-slate-400 text-lg">:</span>
+        <span className="font-bold text-slate-400 text-base sm:text-lg shrink-0">:</span>
 
         {/* Minute Selector */}
-        <div className="relative flex-1">
+        <div className={`relative ${fieldWidth}`}>
           <select
-            value={MINUTES.includes(minute) ? minute : 'custom'}
+            id={id ? `${id}-minute` : undefined}
+            data-testid={id ? `${id}-minute` : undefined}
+            value={minute}
             disabled={disabled}
-            onChange={(e) => {
-              if (e.target.value !== 'custom') {
-                handleMinuteChange(e.target.value);
-              }
-            }}
-            className="w-full py-2.5 px-3 bg-white border border-border rounded-xl text-sm font-semibold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center"
+            onChange={(e) => handleMinuteChange(e.target.value)}
+            className={`w-full ${selectPadding} bg-white border border-border rounded-xl font-semibold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center`}
             aria-label={`${label || 'Time'} minute`}
           >
             {MINUTES.map((m) => (
@@ -155,24 +165,21 @@ export function TimePicker12h({
                 {m}
               </option>
             ))}
-            {!MINUTES.includes(minute) && (
-              <option value="custom">
-                {minute}
-              </option>
-            )}
           </select>
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary pointer-events-none">
+          <span className={`absolute ${badgeClass} top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none font-medium`}>
             MIN
           </span>
         </div>
 
         {/* AM / PM Segmented Control */}
-        <div className="flex rounded-xl bg-slate-100 border border-border p-1 shrink-0 gap-1">
+        <div className={`flex rounded-xl bg-slate-100 border border-border ${containerPadding} shrink-0`}>
           <button
             type="button"
+            id={id ? `${id}-am` : undefined}
+            data-testid={id ? `${id}-am` : undefined}
             disabled={disabled}
             onClick={() => handlePeriodChange('AM')}
-            className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`${buttonPadding} rounded-lg font-bold transition-all cursor-pointer ${
               period === 'AM'
                 ? 'bg-white text-warning border border-amber-200 shadow-xs'
                 : 'text-text-secondary hover:text-text-primary'
@@ -182,9 +189,11 @@ export function TimePicker12h({
           </button>
           <button
             type="button"
+            id={id ? `${id}-pm` : undefined}
+            data-testid={id ? `${id}-pm` : undefined}
             disabled={disabled}
             onClick={() => handlePeriodChange('PM')}
-            className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`${buttonPadding} rounded-lg font-bold transition-all cursor-pointer ${
               period === 'PM'
                 ? 'bg-white text-primary border border-blue-200 shadow-xs'
                 : 'text-text-secondary hover:text-text-primary'

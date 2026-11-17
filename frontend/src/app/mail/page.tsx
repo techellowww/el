@@ -1270,8 +1270,16 @@ export default function MailModulePage() {
 
       {/* Error Detail Modal */}
       {selectedErrorLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white border border-border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedErrorLog(null);
+          }}
+        >
+          <div
+            className="bg-white border border-border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <div className="flex items-center gap-2.5 text-error font-bold text-sm">
                 <AlertTriangle className="w-5 h-5" />

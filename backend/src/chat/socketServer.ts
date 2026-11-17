@@ -28,7 +28,7 @@ export function getSocketIOInstance(): SocketIOServer | null {
 export function broadcastChatMessage(accountId: string, conversationId: string, messageItem: any) {
   if (!ioInstance) return false;
   const roomName = `conv:${conversationId}`;
-  ioInstance.to(roomName).to(`account:${accountId}`).emit('new_message', {
+  ioInstance.to(roomName).to(`admin:${accountId}`).emit('new_message', {
     conversationId,
     message: messageItem,
   });
@@ -232,6 +232,11 @@ export function initChatSocketServer(httpServer: HttpServer) {
     socket.join(`user:${user.id}`);
     socket.join('conv:general');
 
+    // Admins join an account-level admin room so they receive all client channel messages in real-time
+    if (user.role === 'ADMIN') {
+      socket.join(`admin:${user.accountId}`);
+    }
+
     // Track online presence
     const existing = onlineUsers.get(user.id);
     if (existing) {
@@ -275,6 +280,14 @@ export function initChatSocketServer(httpServer: HttpServer) {
         });
 
         const generalClient = await getOrCreateGeneralClient(user.accountId, user.email);
+
+        // Leave any previously joined client/project conversation rooms before re-joining current accessible channels
+        const existingRooms = Array.from(socket.rooms);
+        for (const r of existingRooms) {
+          if (r.startsWith('conv:') && r !== 'conv:general') {
+            socket.leave(r);
+          }
+        }
 
         // Auto-join socket to all accessible channels so background notifications arrive
         socket.join('conv:general');
@@ -543,6 +556,44 @@ export function initChatSocketServer(httpServer: HttpServer) {
           return;
         }
 
+        // Employee access control: only staff assigned to this client can join/view
+        if (user.role === 'EMPLOYEE' && conversationId !== 'general') {
+          let targetClientId = conversationId;
+          const proj = await prisma.project.findFirst({
+            where: { id: conversationId, accountId: user.accountId },
+            select: { clientId: true },
+          });
+          if (proj) {
+            targetClientId = proj.clientId;
+          } else {
+            const client = await prisma.client.findFirst({
+              where: { id: conversationId, accountId: user.accountId },
+              select: { id: true },
+            });
+            if (!client) {
+              if (typeof ack === 'function') ack({ success: false, error: 'Channel not found' });
+              socket.emit('error', { message: 'Channel not found' });
+              return;
+            }
+          }
+
+          const assignment = await prisma.clientAssignment.findUnique({
+            where: {
+              clientId_userId: {
+                clientId: targetClientId,
+                userId: user.id,
+              },
+            },
+          });
+
+          if (!assignment) {
+            const errorMsg = 'Access denied: You are not assigned to this client.';
+            if (typeof ack === 'function') ack({ success: false, error: errorMsg });
+            socket.emit('error', { message: errorMsg });
+            return;
+          }
+        }
+
         const roomName = `conv:${conversationId}`;
         socket.join(roomName);
 
@@ -683,6 +734,25 @@ export function initChatSocketServer(httpServer: HttpServer) {
             }
           }
 
+          // Employee access control: unassigned employees cannot post messages to this client
+          if (user.role === 'EMPLOYEE' && conversationId !== 'general') {
+            const assignment = await prisma.clientAssignment.findUnique({
+              where: {
+                clientId_userId: {
+                  clientId: targetClientId,
+                  userId: user.id,
+                },
+              },
+            });
+
+            if (!assignment) {
+              const errorMsg = 'Access denied: You are not assigned to this client conversation.';
+              if (typeof ack === 'function') ack({ success: false, error: errorMsg });
+              socket.emit('error', { message: errorMsg });
+              return;
+            }
+          }
+
           const createdMsg = await prisma.message.create({
             data: {
               accountId: user.accountId,
@@ -720,7 +790,7 @@ export function initChatSocketServer(httpServer: HttpServer) {
           };
 
           const roomName = `conv:${conversationId}`;
-          io.to(roomName).to(`account:${user.accountId}`).emit('new_message', {
+          io.to(roomName).to(`admin:${user.accountId}`).emit('new_message', {
             conversationId,
             message: messageItem,
           });
@@ -743,6 +813,28 @@ export function initChatSocketServer(httpServer: HttpServer) {
       'mark_read',
       async ({ conversationId }: { conversationId: string }, ack?: (data: any) => void) => {
         try {
+          if (user.role === 'EMPLOYEE' && conversationId !== 'general') {
+            let targetClientId = conversationId;
+            const proj = await prisma.project.findFirst({
+              where: { id: conversationId, accountId: user.accountId },
+              select: { clientId: true },
+            });
+            if (proj) {
+              targetClientId = proj.clientId;
+            }
+            const assignment = await prisma.clientAssignment.findUnique({
+              where: {
+                clientId_userId: {
+                  clientId: targetClientId,
+                  userId: user.id,
+                },
+              },
+            });
+            if (!assignment) {
+              if (typeof ack === 'function') ack({ success: false, error: 'Access denied' });
+              return;
+            }
+          }
           await markConversationAsRead(user.accountId, user.id, conversationId);
           if (typeof ack === 'function') ack({ success: true, conversationId });
         } catch (err: any) {
@@ -755,8 +847,27 @@ export function initChatSocketServer(httpServer: HttpServer) {
     // 4. Typing Indicator
     socket.on(
       'typing',
-      ({ conversationId, isTyping }: { conversationId: string; isTyping: boolean }) => {
+      async ({ conversationId, isTyping }: { conversationId: string; isTyping: boolean }) => {
         if (!conversationId) return;
+        if (user.role === 'EMPLOYEE' && conversationId !== 'general') {
+          let targetClientId = conversationId;
+          const proj = await prisma.project.findFirst({
+            where: { id: conversationId, accountId: user.accountId },
+            select: { clientId: true },
+          });
+          if (proj) {
+            targetClientId = proj.clientId;
+          }
+          const assignment = await prisma.clientAssignment.findUnique({
+            where: {
+              clientId_userId: {
+                clientId: targetClientId,
+                userId: user.id,
+              },
+            },
+          });
+          if (!assignment) return;
+        }
         const roomName = `conv:${conversationId}`;
         socket.to(roomName).emit('user_typing', {
           conversationId,
@@ -820,7 +931,7 @@ export function initChatSocketServer(httpServer: HttpServer) {
             createdAt: updated.createdAt.toISOString(),
           };
 
-          io.to(`conv:${convId}`).emit('message_updated', {
+          io.to(`conv:${convId}`).to(`admin:${user.accountId}`).emit('message_updated', {
             conversationId: convId,
             message: messageItem,
           });
@@ -858,7 +969,7 @@ export function initChatSocketServer(httpServer: HttpServer) {
           });
 
           const convId = message.isInternalNote && !message.projectId ? 'general' : (message.projectId || message.clientId);
-          io.to(`conv:${convId}`).emit('message_deleted', {
+          io.to(`conv:${convId}`).to(`admin:${user.accountId}`).emit('message_deleted', {
             conversationId: convId,
             messageId,
           });

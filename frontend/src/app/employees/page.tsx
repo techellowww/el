@@ -98,7 +98,7 @@ export default function EmployeesPage() {
     fetchEmployees();
   }, []);
 
-  const openCreateModal = () => {
+  const resetForm = () => {
     setEditingEmp(null);
     setName("");
     setEmail("");
@@ -106,6 +106,15 @@ export default function EmployeesPage() {
     setRole("EMPLOYEE");
     setSelectedClientIds([]);
     setModalError(null);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    resetForm();
+  };
+
+  const openCreateModal = () => {
+    resetForm();
     setShowModal(true);
   };
 
@@ -167,7 +176,7 @@ export default function EmployeesPage() {
         }
       }
 
-      setShowModal(false);
+      handleCloseModal();
       fetchEmployees();
     } catch (err: any) {
       setModalError(err.message || "Failed to save employee");
@@ -531,16 +540,25 @@ export default function EmployeesPage() {
 
       {/* Add / Edit Employee Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-6 max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submitting) handleCloseModal();
+          }}
+        >
+          <div
+            className="w-full max-w-lg bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-6 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <h3 className="section-heading text-text-primary flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-primary" />
                 <span>{editingEmp ? "Edit Team Member" : "Add New Team Member"}</span>
               </h3>
               <button
-                onClick={() => setShowModal(false)}
-                className="text-text-secondary hover:text-text-primary p-1 rounded-lg transition"
+                type="button"
+                onClick={handleCloseModal}
+                className="text-text-secondary hover:text-text-primary p-1 rounded-lg transition cursor-pointer"
               >
                 ✕
               </button>
@@ -653,7 +671,7 @@ export default function EmployeesPage() {
               <div className="flex justify-end gap-3 pt-3 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={handleCloseModal}
                   className="px-4 py-2 rounded-xl btn-text text-text-secondary hover:text-text-primary transition"
                 >
                   Cancel
@@ -673,8 +691,16 @@ export default function EmployeesPage() {
 
       {/* Delete Confirmation Modal */}
       {empToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white border border-border rounded-card p-6 shadow-xl space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !deleting) setEmpToDelete(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white border border-border rounded-card p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="section-heading text-text-primary flex items-center gap-2 text-error">
               <Trash2 className="w-5 h-5 text-error" />
               <span>Remove Team Member?</span>

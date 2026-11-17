@@ -76,6 +76,26 @@ export default function ProposalsPage() {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  const resetForm = () => {
+    setSelectedClientId("");
+    setSelectedProjectId("");
+    setTitle("");
+    setContentHtml("");
+    setProjectDescription("");
+    setPricingItems([
+      { name: "Website Architecture & UX Wireframes", priceCents: 150000 },
+      { name: "Full-Stack Development Sprint & CMS", priceCents: 350000 },
+      { name: "Staging Testing, QA & Launch Deployment", priceCents: 100000 },
+    ]);
+    setErrorMsg(null);
+    setAiError(null);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    resetForm();
+  };
+
   const fetchProposals = async () => {
     try {
       const res = await fetch("/api/proposals");
@@ -201,12 +221,7 @@ export default function ProposalsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create proposal");
 
-      setShowModal(false);
-      setTitle("");
-      setContentHtml("");
-      setSelectedClientId("");
-      setSelectedProjectId("");
-      setProjectDescription("");
+      handleCloseModal();
       setSuccessMsg("Draft proposal created successfully!");
       setTimeout(() => setSuccessMsg(null), 4000);
       fetchProposals();
@@ -337,7 +352,10 @@ export default function ProposalsPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={() => {
+            resetForm();
+            setShowModal(true);
+          }}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-sm transition cursor-pointer"
         >
           <Sparkles className="w-4 h-4" />
@@ -555,14 +573,26 @@ export default function ProposalsPage() {
 
       {/* New Proposal Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-xl space-y-5 my-8 max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submitting && !isGeneratingAi) handleCloseModal();
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-xl space-y-5 my-8 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-primary" />
                 <h3 className="text-lg font-bold text-text-primary">Create Project Proposal</h3>
               </div>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -765,7 +795,7 @@ export default function ProposalsPage() {
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={handleCloseModal}
                   className="px-4 py-2 rounded-xl border border-border text-xs font-medium text-slate-700 hover:bg-slate-50 transition cursor-pointer"
                 >
                   Cancel

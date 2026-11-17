@@ -394,8 +394,19 @@ export default function ClientProposalPage({
 
       {/* Decline Confirmation Modal */}
       {showDeclineModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeclining) {
+              setShowDeclineModal(false);
+              setDeclineReason("");
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-base font-bold text-slate-900">Decline Proposal</h3>
             <p className="text-xs text-slate-600">
               Are you sure you wish to decline this proposal? You may optionally provide a reason for the agency.
@@ -413,7 +424,10 @@ export default function ClientProposalPage({
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowDeclineModal(false)}
+                  onClick={() => {
+                    setShowDeclineModal(false);
+                    setDeclineReason("");
+                  }}
                   className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 cursor-pointer"
                 >
                   Cancel

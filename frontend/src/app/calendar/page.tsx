@@ -48,6 +48,27 @@ export default function CalendarPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const resetForm = () => {
+    const today = new Date().toISOString().split("T")[0];
+    setTitle("");
+    setDescription("");
+    setStartDate(today);
+    setStartTime("10:00");
+    setEndDate(today);
+    setEndTime("11:00");
+    setLocationUrl("");
+    setClientId("");
+    setProjectId("");
+    setInviteClient(true);
+    setSelectedEmployeeIds([]);
+    setErrorMsg(null);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    resetForm();
+  };
+
   const fetchEvents = async () => {
     try {
       const res = await fetch("/api/events");
@@ -105,18 +126,23 @@ export default function CalendarPage() {
       const startIso = new Date(`${startDate}T${startTime}:00`).toISOString();
       const endIso = new Date(`${endDate}T${endTime}:00`).toISOString();
 
-      // Build attendees list
+      // Build attendees list only for selected participants
       const attendees: any[] = [];
+      const seenEmails = new Set<string>();
 
       // Add selected client
       if (clientId && inviteClient) {
         const client = clients.find((c) => c.id === clientId);
         if (client?.email) {
-          attendees.push({
-            email: client.email,
-            name: client.name,
-            isClient: true,
-          });
+          const normEmail = client.email.trim().toLowerCase();
+          if (!seenEmails.has(normEmail)) {
+            seenEmails.add(normEmail);
+            attendees.push({
+              email: normEmail,
+              name: client.name,
+              isClient: true,
+            });
+          }
         }
       }
 
@@ -124,23 +150,17 @@ export default function CalendarPage() {
       for (const empId of selectedEmployeeIds) {
         const emp = employees.find((e) => e.id === empId);
         if (emp?.email) {
-          attendees.push({
-            email: emp.email,
-            name: emp.name,
-            userId: emp.id,
-            isClient: false,
-          });
+          const normEmail = emp.email.trim().toLowerCase();
+          if (!seenEmails.has(normEmail)) {
+            seenEmails.add(normEmail);
+            attendees.push({
+              email: normEmail,
+              name: emp.name,
+              userId: emp.id,
+              isClient: false,
+            });
+          }
         }
-      }
-
-      // Add self if not already included
-      if (user?.email && !attendees.some((a) => a.email === user.email)) {
-        attendees.push({
-          email: user.email,
-          name: user.name,
-          userId: user.id,
-          isClient: false,
-        });
       }
 
       const res = await fetch("/api/events", {
@@ -161,15 +181,27 @@ export default function CalendarPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create event");
 
-      setShowModal(false);
-      setTitle("");
-      setDescription("");
-      setLocationUrl("");
-      setClientId("");
-      setProjectId("");
-      setSelectedEmployeeIds([]);
-      setSuccessMsg("Event scheduled and .ics calendar invites sent!");
-      setTimeout(() => setSuccessMsg(null), 5000);
+      handleCloseModal();
+      
+      const sentCount = data.invitationResults?.sent?.length ?? 0;
+      const failedCount = data.invitationResults?.failed?.length ?? 0;
+
+      if (failedCount > 0 && sentCount === 0) {
+        setErrorMsg(
+          `Event scheduled, but email invitations failed to send to ${data.invitationResults.failed.map((f: any) => f.email).join(', ')}. Please verify SMTP settings in Settings.`
+        );
+      } else if (failedCount > 0 && sentCount > 0) {
+        setSuccessMsg(
+          `Event scheduled! Invitations sent to ${sentCount} participant(s). Delivery failed for: ${data.invitationResults.failed.map((f: any) => f.email).join(', ')}.`
+        );
+        setTimeout(() => setSuccessMsg(null), 6000);
+      } else if (sentCount > 0) {
+        setSuccessMsg(`Event scheduled and email invitations sent to ${sentCount} participant(s)!`);
+        setTimeout(() => setSuccessMsg(null), 5000);
+      } else {
+        setSuccessMsg("Event scheduled successfully!");
+        setTimeout(() => setSuccessMsg(null), 5000);
+      }
       fetchEvents();
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to schedule event");
@@ -202,9 +234,7 @@ export default function CalendarPage() {
         </div>
         <button
           onClick={() => {
-            const today = new Date().toISOString().split("T")[0];
-            setStartDate(today);
-            setEndDate(today);
+            resetForm();
             setShowModal(true);
           }}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-sm transition cursor-pointer"
@@ -324,11 +354,23 @@ export default function CalendarPage() {
 
       {/* New Event Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 my-8">
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseModal();
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="text-lg font-bold text-text-primary">Schedule Meeting / Event</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -496,7 +538,7 @@ export default function CalendarPage() {
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={handleCloseModal}
                   className="px-4 py-2 rounded-xl border border-border text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
                 >
                   Cancel

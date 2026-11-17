@@ -1318,8 +1318,16 @@ export default function ScreenshotModulePage() {
 
       {/* Backup to Drive Modal */}
       {backupModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white border border-border rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl overflow-hidden flex flex-col">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isBackingUp) setBackupModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white border border-border rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="flex items-start justify-between pb-3 border-b border-border">
               <div className="flex items-center gap-3">
@@ -1445,8 +1453,16 @@ export default function ScreenshotModulePage() {
 
       {/* 5.3 Screenshot High-Resolution Viewer Modal */}
       {previewScreenshot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white border border-border rounded-2xl max-w-4xl w-full p-5 space-y-4 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPreviewScreenshot(null);
+          }}
+        >
+          <div
+            className="bg-white border border-border rounded-2xl max-w-4xl w-full p-5 space-y-4 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-border shrink-0">
               <div className="flex items-center gap-3">

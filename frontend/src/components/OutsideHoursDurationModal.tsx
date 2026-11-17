@@ -66,11 +66,17 @@ export function OutsideHoursDurationModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isStarting) onClose();
+      }}
+    >
       <div
         className="w-full max-w-lg rounded-card bg-white border border-border shadow-xl overflow-hidden transform transition-all animate-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="relative p-6 pb-4 bg-amber-50/70 border-b border-amber-200/60">

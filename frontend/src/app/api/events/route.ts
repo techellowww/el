@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const event = await createCalendarEvent({
+    const result = await createCalendarEvent({
       accountId: session.accountId,
       createdById: session.userId,
       title,
@@ -85,7 +85,10 @@ export async function POST(request: Request) {
       attendees: Array.isArray(attendees) ? attendees : [],
     });
 
-    return NextResponse.json({ event });
+    return NextResponse.json({
+      event: result.event,
+      invitationResults: result.invitationResults,
+    });
   } catch (err: any) {
     console.error("Create calendar event error:", err);
     return NextResponse.json(

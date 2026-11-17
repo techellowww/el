@@ -1159,8 +1159,16 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
 
       {/* Inactivity Auto-Cut Notification Modal */}
       {showIdleStoppedModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl border border-red-200 max-w-md w-full p-6 space-y-4">
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowIdleStoppedModal(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-red-200 max-w-md w-full p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 text-red-600 flex items-center justify-center shrink-0">
                 <Clock className="w-5 h-5" />

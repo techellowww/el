@@ -89,7 +89,10 @@ function ModalShell({ open, onClose, children }: { open: boolean; onClose: () =>
         onClick={onClose}
       />
       {/* Card */}
-      <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-xl border border-border animate-in zoom-in-95 fade-in duration-150">
+      <div
+        className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-xl border border-border animate-in zoom-in-95 fade-in duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
         {children}
       </div>
     </div>

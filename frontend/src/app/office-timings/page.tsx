@@ -18,7 +18,7 @@ import {
   Loader2,
   Activity,
 } from 'lucide-react';
-import { format24hTo12h } from '@/components/TimePicker12h';
+import { TimePicker12h, format24hTo12h } from '@/components/TimePicker12h';
 
 interface DaySchedule {
   start: string;
@@ -374,47 +374,43 @@ export default function OfficeTimingsPage() {
 
                     {/* Start Time and End Time */}
                     {isAdmin ? (
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
                         {/* Start Time */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
                           <label
-                            htmlFor={`start-time-${day.key}`}
-                            className="label-text text-text-secondary w-20 shrink-0 font-medium"
+                            htmlFor={`start-time-${day.key}-hour`}
+                            className="label-text text-text-secondary sm:w-20 shrink-0 font-medium"
                           >
                             Start Time:
                           </label>
-                          <input
-                            id={`start-time-${day.key}`}
-                            data-testid={`start-time-${day.key}`}
-                            type="time"
-                            value={schedule.start}
-                            onChange={(e) => handleDayTimeChange(day.key, 'start', e.target.value)}
-                            className="py-2 px-3 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary w-full"
-                          />
-                          <span className="text-xs text-text-secondary font-mono shrink-0 w-20 text-right">
-                            {format24hTo12h(schedule.start)}
-                          </span>
+                          <div className="flex-1">
+                            <TimePicker12h
+                              id={`start-time-${day.key}`}
+                              dataTestId={`start-time-${day.key}`}
+                              value={schedule.start}
+                              onChange={(val) => handleDayTimeChange(day.key, 'start', val)}
+                              size="sm"
+                            />
+                          </div>
                         </div>
 
                         {/* End Time */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
                           <label
-                            htmlFor={`end-time-${day.key}`}
-                            className="label-text text-text-secondary w-20 shrink-0 font-medium"
+                            htmlFor={`end-time-${day.key}-hour`}
+                            className="label-text text-text-secondary sm:w-20 shrink-0 font-medium"
                           >
                             End Time:
                           </label>
-                          <input
-                            id={`end-time-${day.key}`}
-                            data-testid={`end-time-${day.key}`}
-                            type="time"
-                            value={schedule.end}
-                            onChange={(e) => handleDayTimeChange(day.key, 'end', e.target.value)}
-                            className="py-2 px-3 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary w-full"
-                          />
-                          <span className="text-xs text-text-secondary font-mono shrink-0 w-20 text-right">
-                            {format24hTo12h(schedule.end)}
-                          </span>
+                          <div className="flex-1">
+                            <TimePicker12h
+                              id={`end-time-${day.key}`}
+                              dataTestId={`end-time-${day.key}`}
+                              value={schedule.end}
+                              onChange={(val) => handleDayTimeChange(day.key, 'end', val)}
+                              size="sm"
+                            />
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -423,15 +419,15 @@ export default function OfficeTimingsPage() {
                         <div className="flex items-center gap-2">
                           <span className="label-text text-text-secondary w-20 shrink-0 font-medium">Start:</span>
                           <div className="py-2 px-3 bg-slate-50 border border-border rounded-xl text-xs sm:text-sm text-text-primary font-mono w-full flex items-center justify-between">
-                            <span>{schedule.start}</span>
-                            <span className="text-xs text-text-secondary font-mono">({format24hTo12h(schedule.start)})</span>
+                            <span className="font-semibold">{format24hTo12h(schedule.start)}</span>
+                            <span className="text-xs text-text-secondary font-mono">({schedule.start})</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="label-text text-text-secondary w-20 shrink-0 font-medium">End:</span>
                           <div className="py-2 px-3 bg-slate-50 border border-border rounded-xl text-xs sm:text-sm text-text-primary font-mono w-full flex items-center justify-between">
-                            <span>{schedule.end}</span>
-                            <span className="text-xs text-text-secondary font-mono">({format24hTo12h(schedule.end)})</span>
+                            <span className="font-semibold">{format24hTo12h(schedule.end)}</span>
+                            <span className="text-xs text-text-secondary font-mono">({schedule.end})</span>
                           </div>
                         </div>
                       </div>

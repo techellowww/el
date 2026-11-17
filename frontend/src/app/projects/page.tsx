@@ -77,6 +77,58 @@ export default function ProjectsPage() {
 
   const isAdmin = user?.role === "ADMIN";
 
+  const resetCreateForm = () => {
+    setNewClientId(clients.length > 0 ? clients[0].id : "");
+    setNewName("");
+    setNewDesc("");
+    setNewStage("DISCOVERY");
+    setNewStagingUrl("");
+    setNewLiveUrl("");
+    setCreateError(null);
+  };
+
+  const handleCloseCreateModal = () => {
+    setShowCreateModal(false);
+    resetCreateForm();
+  };
+
+  const handleCloseEditModal = () => {
+    setProjectToEdit(null);
+    setEditClientId("");
+    setEditName("");
+    setEditDesc("");
+    setEditStage("DISCOVERY");
+    setEditStagingUrl("");
+    setEditLiveUrl("");
+    setEditError(null);
+  };
+
+  const resetPostUpdateForm = () => {
+    setUpdateTitle("");
+    setUpdateBody("");
+    setNotifyClient(true);
+    setPostError(null);
+  };
+
+  const handleClosePostUpdateModal = () => {
+    setSelectedProjectForUpdate(null);
+    resetPostUpdateForm();
+  };
+
+  const resetSubProjectForm = () => {
+    setSubName("");
+    setSubDesc("");
+    setSubStage("IN_PROGRESS");
+    setSubProjectError(null);
+    setSubProjectToEdit(null);
+    setTargetParentProject(null);
+  };
+
+  const handleCloseSubProjectModal = () => {
+    setSubProjectModalOpen(false);
+    resetSubProjectForm();
+  };
+
   const fetchProjectsAndClients = async () => {
     try {
       const [projRes, clientRes] = await Promise.all([
@@ -140,12 +192,7 @@ export default function ProjectsPage() {
         return;
       }
 
-      setShowCreateModal(false);
-      setNewName("");
-      setNewDesc("");
-      setNewStage("DISCOVERY");
-      setNewStagingUrl("");
-      setNewLiveUrl("");
+      handleCloseCreateModal();
       fetchProjectsAndClients();
     } catch (err: any) {
       setCreateError(err.message || "Failed to create project");
@@ -197,7 +244,7 @@ export default function ProjectsPage() {
         return;
       }
 
-      setProjectToEdit(null);
+      handleCloseEditModal();
       fetchProjectsAndClients();
     } catch (err: any) {
       setEditError(err.message || "Failed to update project");
@@ -256,9 +303,7 @@ export default function ProjectsPage() {
         return;
       }
 
-      setSelectedProjectForUpdate(null);
-      setUpdateTitle("");
-      setUpdateBody("");
+      handleClosePostUpdateModal();
       fetchProjectsAndClients();
     } catch (err: any) {
       setPostError(err.message || "Failed to post status update");
@@ -357,7 +402,7 @@ export default function ProjectsPage() {
         return;
       }
 
-      setSubProjectModalOpen(false);
+      handleCloseSubProjectModal();
       fetchProjectsAndClients();
     } catch (err: any) {
       setSubProjectError(err.message || "Network error saving sub-project");
@@ -424,8 +469,8 @@ export default function ProjectsPage() {
         {isAdmin && (
           <button
             onClick={() => {
+              resetCreateForm();
               setShowCreateModal(true);
-              setCreateError(null);
             }}
             className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white btn-text shadow-sm transition cursor-pointer self-start sm:self-auto shrink-0 whitespace-nowrap"
           >
@@ -723,11 +768,8 @@ export default function ProjectsPage() {
                   </span>
                   <button
                     onClick={() => {
+                      resetPostUpdateForm();
                       setSelectedProjectForUpdate(proj);
-                      setUpdateTitle("");
-                      setUpdateBody("");
-                      setNotifyClient(true);
-                      setPostError(null);
                     }}
                     className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-text-primary border border-border btn-text transition cursor-pointer shadow-sm self-start sm:self-auto"
                   >
@@ -743,15 +785,24 @@ export default function ProjectsPage() {
 
       {/* New Project Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-6 max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !creating) handleCloseCreateModal();
+          }}
+        >
+          <div
+            className="w-full max-w-lg bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-6 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <h3 className="section-heading text-text-primary flex items-center gap-2">
                 <FolderKanban className="w-5 h-5 text-primary" />
                 <span>Create New Project</span>
               </h3>
               <button
-                onClick={() => setShowCreateModal(false)}
+                type="button"
+                onClick={handleCloseCreateModal}
                 className="text-text-secondary hover:text-text-primary p-1 rounded-lg transition"
               >
                 <X className="w-5 h-5" />
@@ -857,7 +908,7 @@ export default function ProjectsPage() {
               <div className="flex justify-end gap-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={handleCloseCreateModal}
                   className="px-4 py-2 rounded-xl btn-text text-text-secondary hover:text-text-primary transition"
                 >
                   Cancel
@@ -878,15 +929,24 @@ export default function ProjectsPage() {
 
       {/* Edit Project Modal */}
       {projectToEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-6 max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !updatingProject) handleCloseEditModal();
+          }}
+        >
+          <div
+            className="w-full max-w-lg bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-6 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <h3 className="section-heading text-text-primary flex items-center gap-2">
                 <Pencil className="w-5 h-5 text-primary" />
                 <span>Edit Project</span>
               </h3>
               <button
-                onClick={() => setProjectToEdit(null)}
+                type="button"
+                onClick={handleCloseEditModal}
                 className="text-text-secondary hover:text-text-primary p-1 rounded-lg transition"
               >
                 <X className="w-5 h-5" />
@@ -992,7 +1052,7 @@ export default function ProjectsPage() {
               <div className="flex justify-end gap-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setProjectToEdit(null)}
+                  onClick={handleCloseEditModal}
                   className="px-4 py-2 rounded-xl btn-text text-text-secondary hover:text-text-primary transition"
                 >
                   Cancel
@@ -1013,8 +1073,16 @@ export default function ProjectsPage() {
 
       {/* Delete Project Confirmation Modal */}
       {projectToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-5">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !deletingProject) setProjectToDelete(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3 text-error">
               <div className="p-3 bg-red-50 border border-red-200 rounded-full">
                 <AlertTriangle className="w-6 h-6 text-error" />
@@ -1063,8 +1131,16 @@ export default function ProjectsPage() {
 
       {/* Post Status Update Modal */}
       {selectedProjectForUpdate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !postingUpdate) handleClosePostUpdateModal();
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="section-heading text-text-primary flex items-center gap-2">
@@ -1076,7 +1152,8 @@ export default function ProjectsPage() {
                 </p>
               </div>
               <button
-                onClick={() => setSelectedProjectForUpdate(null)}
+                type="button"
+                onClick={handleClosePostUpdateModal}
                 className="text-text-secondary hover:text-text-primary p-1 rounded-lg transition"
               >
                 <X className="w-5 h-5" />
@@ -1138,7 +1215,7 @@ export default function ProjectsPage() {
               <div className="flex justify-end gap-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setSelectedProjectForUpdate(null)}
+                  onClick={handleClosePostUpdateModal}
                   className="px-4 py-2 rounded-xl btn-text text-text-secondary hover:text-text-primary transition"
                 >
                   Cancel
@@ -1159,8 +1236,16 @@ export default function ProjectsPage() {
 
       {/* Create / Edit Sub-Project Modal */}
       {subProjectModalOpen && targetParentProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white border border-border rounded-card p-6 shadow-xl space-y-5">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSavingSubProject) handleCloseSubProjectModal();
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white border border-border rounded-card p-6 shadow-xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-primary-subtle text-primary border border-blue-200 flex items-center justify-center">
@@ -1177,7 +1262,7 @@ export default function ProjectsPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setSubProjectModalOpen(false)}
+                onClick={handleCloseSubProjectModal}
                 disabled={isSavingSubProject}
                 className="text-text-secondary hover:text-text-primary p-1 rounded-lg transition cursor-pointer"
               >
@@ -1245,7 +1330,7 @@ export default function ProjectsPage() {
               <div className="pt-2 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setSubProjectModalOpen(false)}
+                  onClick={handleCloseSubProjectModal}
                   disabled={isSavingSubProject}
                   className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-text-primary btn-text transition cursor-pointer"
                 >
@@ -1269,8 +1354,16 @@ export default function ProjectsPage() {
 
       {/* Delete Sub-Project Confirmation Modal */}
       {subProjectToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-sm bg-white border border-border rounded-card p-6 shadow-xl space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingSubProject) setSubProjectToDelete(null);
+          }}
+        >
+          <div
+            className="w-full max-w-sm bg-white border border-border rounded-card p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-red-50 text-error border border-red-200 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5" />

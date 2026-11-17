@@ -44,11 +44,21 @@ export async function postClientMessage(params: {
     throw new Error("File attachment exceeds 10 MB limit.");
   }
 
+  // Ensure project strictly belongs to this client and account
+  let validProjectId: string | null = null;
+  if (params.projectId) {
+    const proj = await prisma.project.findFirst({
+      where: { id: params.projectId, clientId: client.id, accountId: client.accountId },
+      select: { id: true },
+    });
+    if (proj) validProjectId = proj.id;
+  }
+
   const message = await prisma.message.create({
     data: {
       accountId: client.accountId,
       clientId: client.id,
-      projectId: params.projectId || null,
+      projectId: validProjectId,
       senderType: "CLIENT",
       clientSenderName: client.name,
       content: params.content.trim(),
@@ -60,7 +70,7 @@ export async function postClientMessage(params: {
   });
 
   // Real-time broadcast to agency team via chat server
-  const conversationId = params.projectId || client.id;
+  const conversationId = validProjectId || client.id;
   const messageItem = {
     id: message.id,
     conversationId,

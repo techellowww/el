@@ -252,7 +252,10 @@ export function ChatDrawer() {
           });
           setAllUnreadCounts(initialCounts);
 
-          if (res.conversations.length > 0 && !activeConvIdRef.current) {
+          if (
+            res.conversations.length > 0 &&
+            (!activeConvIdRef.current || !res.conversations.some((c: any) => c.id === activeConvIdRef.current))
+          ) {
             setActiveConvId(res.conversations[0].id);
           }
         }
@@ -296,7 +299,10 @@ export function ChatDrawer() {
       });
       setAllUnreadCounts(initialCounts);
 
-      if (data.conversations?.length > 0 && !activeConvIdRef.current) {
+      if (
+        data.conversations?.length > 0 &&
+        (!activeConvIdRef.current || !data.conversations.some((c: any) => c.id === activeConvIdRef.current))
+      ) {
         setActiveConvId(data.conversations[0].id);
       }
     });
@@ -308,6 +314,13 @@ export function ChatDrawer() {
     });
 
     socket.on('new_message', (data: { conversationId: string; message: MessageItem }) => {
+      // Permission check: employees only process messages for general or assigned conversations
+      if (user?.role === 'EMPLOYEE' && data.conversationId !== 'general') {
+        const isPermitted = conversations.some((c) => c.id === data.conversationId);
+        if (!isPermitted) {
+          return;
+        }
+      }
       const isFromMe = (data.message.senderType === 'TEAM' || !data.message.senderType) && data.message.senderId === user.id;
       const isDocFocused = typeof document !== 'undefined' ? (!document.hidden && document.hasFocus()) : true;
       const isCurrentlyViewed = isOpenRef.current && activeConvIdRef.current === data.conversationId && isDocFocused;
@@ -413,6 +426,12 @@ export function ChatDrawer() {
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputContent.trim() || !activeConvId || !socketRef.current) return;
+
+    // Staff/Employee check: ensure staff can only send to assigned client channels or general
+    if (user?.role === 'EMPLOYEE' && activeConvId !== 'general') {
+      const isPermitted = conversations.some((c) => c.id === activeConvId);
+      if (!isPermitted) return;
+    }
 
     socketRef.current.emit('send_message', {
       conversationId: activeConvId,

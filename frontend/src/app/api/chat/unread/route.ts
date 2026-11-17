@@ -166,6 +166,21 @@ export async function POST(request: Request) {
     }
 
     if (targetClientId) {
+      // Access control check for employees: unassigned staff cannot access or mark unassigned client channels as read
+      if (user.role === 'EMPLOYEE' && conversationId !== 'general') {
+        const assignment = await prisma.clientAssignment.findUnique({
+          where: {
+            clientId_userId: {
+              clientId: targetClientId,
+              userId: user.id,
+            },
+          },
+        });
+        if (!assignment) {
+          return NextResponse.json({ error: 'Forbidden: You are not assigned to this client' }, { status: 403 });
+        }
+      }
+
       await prisma.messageRead.upsert({
         where: {
           clientId_userId: {

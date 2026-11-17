@@ -9,7 +9,7 @@ export interface SmtpConfig {
   from?: string;
 }
 
-async function getSmtpSettings(): Promise<SmtpConfig> {
+export async function getSmtpSettings(): Promise<SmtpConfig> {
   const setting = await prisma.emailScheduleSetting.findFirst();
   return {
     host: setting?.smtpHost || process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -20,7 +20,7 @@ async function getSmtpSettings(): Promise<SmtpConfig> {
   };
 }
 
-function createTransporter(cfg: SmtpConfig) {
+export function createTransporter(cfg: SmtpConfig) {
   return nodemailer.createTransport({
     host: cfg.host,
     port: cfg.port,
