@@ -391,34 +391,34 @@ export default function CalendarPage() {
       {/* New Event Modal */}
       {showModal && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleCloseModal();
           }}
         >
           <div
-            className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 my-8"
+            className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-xl space-y-4 my-auto max-h-[92vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-lg font-bold text-text-primary">Schedule Meeting / Event</h3>
+            <div className="flex items-center justify-between border-b border-border pb-3 shrink-0">
+              <h3 className="text-base sm:text-lg font-bold text-text-primary">Schedule Meeting / Event</h3>
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer rounded-lg hover:bg-slate-100 transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {errorMsg && (
-              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2 shrink-0">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
             )}
 
-            <form onSubmit={handleCreateEvent} className="space-y-3.5">
+            <form onSubmit={handleCreateEvent} className="space-y-3.5 overflow-y-auto flex-1 pr-1">
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1">Title *</label>
                 <input
@@ -431,7 +431,7 @@ export default function CalendarPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1">Client</label>
                   <select
@@ -470,7 +470,7 @@ export default function CalendarPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1">Start Date & Time *</label>
                   <input
@@ -481,7 +481,7 @@ export default function CalendarPage() {
                       if (!endDate) setEndDate(e.target.value);
                     }}
                     required
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-border text-xs text-text-primary mb-1.5"
+                    className="w-full px-3 py-2 rounded-xl border border-border text-xs text-text-primary mb-1.5 focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                   <TimePicker12h
                     value={startTime}
@@ -497,7 +497,7 @@ export default function CalendarPage() {
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                     required
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-border text-xs text-text-primary mb-1.5"
+                    className="w-full px-3 py-2 rounded-xl border border-border text-xs text-text-primary mb-1.5 focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                   <TimePicker12h
                     value={endTime}
@@ -545,11 +545,14 @@ export default function CalendarPage() {
                 )}
 
                 {employees.length > 0 && (
-                  <div className="pt-1 space-y-1">
+                  <div className="pt-1 space-y-1.5">
                     <span className="text-[11px] font-semibold text-slate-500 block">Team Members:</span>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 max-h-36 sm:max-h-48 overflow-y-auto pr-1">
                       {employees.map((emp) => (
-                        <label key={emp.id} className="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                        <label
+                          key={emp.id}
+                          className="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer bg-white sm:bg-slate-100/70 hover:bg-slate-100 px-2.5 py-1 rounded-lg border border-border/80 transition"
+                        >
                           <input
                             type="checkbox"
                             checked={selectedEmployeeIds.includes(emp.id)}
@@ -562,7 +565,7 @@ export default function CalendarPage() {
                             }}
                             className="rounded border-slate-300 text-primary"
                           />
-                          <span>{emp.name}</span>
+                          <span className="truncate max-w-[180px] sm:max-w-none">{emp.name}</span>
                         </label>
                       ))}
                     </div>
@@ -570,18 +573,18 @@ export default function CalendarPage() {
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-border shrink-0">
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="px-4 py-2 rounded-xl border border-border text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-border text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer text-center transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Schedule & Send Invites</span>
