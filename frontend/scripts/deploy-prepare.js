@@ -181,7 +181,58 @@ try {
 
         console.log('✅ [deploy-prepare] Seeded admin, employee, sample clients, projects & settings!');
       } else {
-        console.log(`ℹ️ [deploy-prepare] Database already contains ${userCount} users. Seeding skipped.`);
+        console.log(`ℹ️ [deploy-prepare] Database already contains ${userCount} users. User seeding skipped.`);
+      }
+
+      // 4. Ensure EmailScheduleSetting is seeded with valid working SMTP credentials
+      console.log('📧 [deploy-prepare] Ensuring EmailScheduleSetting SMTP configuration...');
+      const defaultSmtpUser = process.env.SMTP_USER || 'ellowwwteam@gmail.com';
+      const defaultSmtpPass = process.env.SMTP_PASS || 'btfh oona qkht yukr';
+      const defaultSmtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+      const defaultSmtpPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
+      const defaultSmtpFrom = process.env.SMTP_FROM || `ClientHub Notifications <${defaultSmtpUser}>`;
+
+      const existingEmailSetting = await prisma.emailScheduleSetting.findFirst();
+      if (!existingEmailSetting) {
+        await prisma.emailScheduleSetting.create({
+          data: {
+            id: 'default-email-setting',
+            accountId: 'account-alpha',
+            enabled: true,
+            scheduleType: 'DAILY',
+            scheduleTime: '18:00',
+            dailyEnabled: true,
+            dailyTime: '15:10',
+            weeklyEnabled: true,
+            weeklyDay: 'FRI',
+            weeklyTime: '15:10',
+            monthlyEnabled: false,
+            monthlyDay: 1,
+            monthlyTime: '18:00',
+            recipients: 'ellowwwteam@gmail.com, dharaneesh.s@ellowww.com',
+            timezone: 'Asia/Kolkata',
+            smtpHost: defaultSmtpHost,
+            smtpPort: defaultSmtpPort,
+            smtpUser: defaultSmtpUser,
+            smtpPass: defaultSmtpPass,
+            smtpFrom: defaultSmtpFrom,
+          },
+        });
+        console.log('✅ [deploy-prepare] Seeded default EmailScheduleSetting with SMTP credentials!');
+      } else if (!existingEmailSetting.smtpPass || !existingEmailSetting.smtpUser) {
+        await prisma.emailScheduleSetting.update({
+          where: { id: existingEmailSetting.id },
+          data: {
+            smtpHost: existingEmailSetting.smtpHost || defaultSmtpHost,
+            smtpPort: existingEmailSetting.smtpPort || defaultSmtpPort,
+            smtpUser: existingEmailSetting.smtpUser || defaultSmtpUser,
+            smtpPass: existingEmailSetting.smtpPass || defaultSmtpPass,
+            smtpFrom: existingEmailSetting.smtpFrom || defaultSmtpFrom,
+          },
+        });
+        console.log('✅ [deploy-prepare] Updated existing EmailScheduleSetting with missing SMTP credentials!');
+      } else {
+        console.log('✅ [deploy-prepare] EmailScheduleSetting already configured.');
       }
     } catch (dbErr) {
       console.warn('⚠️ [deploy-prepare] Seed check warning:', dbErr.message);

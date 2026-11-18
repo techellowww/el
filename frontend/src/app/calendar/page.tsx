@@ -44,6 +44,7 @@ export default function CalendarPage() {
   // Attendees
   const [inviteClient, setInviteClient] = useState(true);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [guestEmails, setGuestEmails] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export default function CalendarPage() {
     setProjectId("");
     setInviteClient(true);
     setSelectedEmployeeIds([]);
+    setGuestEmails("");
     setErrorMsg(null);
   };
 
@@ -199,6 +201,25 @@ export default function CalendarPage() {
         }
       }
 
+      // Add additional guest emails if provided
+      if (guestEmails.trim()) {
+        const extraEmails = guestEmails
+          .split(/[,;\s]+/)
+          .map((e) => e.trim().toLowerCase())
+          .filter((e) => e && e.includes("@"));
+
+        for (const extraEmail of extraEmails) {
+          if (!seenEmails.has(extraEmail)) {
+            seenEmails.add(extraEmail);
+            attendees.push({
+              email: extraEmail,
+              name: extraEmail.split("@")[0],
+              isClient: false,
+            });
+          }
+        }
+      }
+
       const res = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -217,9 +238,23 @@ export default function CalendarPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create event");
 
+      const sentCount = data.invitationResults?.sent?.length || 0;
+      const failedCount = data.invitationResults?.failed?.length || 0;
+
       handleCloseModal();
-      setSuccessMsg("Event scheduled successfully!");
-      setTimeout(() => setSuccessMsg(null), 4000);
+      if (failedCount > 0 && sentCount === 0) {
+        const firstErr = data.invitationResults.failed[0]?.error || "Delivery failed";
+        setErrorMsg(`Meeting scheduled, but invitation emails failed: ${firstErr}`);
+      } else if (failedCount > 0) {
+        setSuccessMsg(`Meeting scheduled! Sent to ${sentCount} attendee(s), ${failedCount} failed.`);
+        setTimeout(() => setSuccessMsg(null), 5000);
+      } else if (sentCount > 0) {
+        setSuccessMsg(`Meeting scheduled & invitation emails sent to ${sentCount} attendee(s)!`);
+        setTimeout(() => setSuccessMsg(null), 4000);
+      } else {
+        setSuccessMsg("Event scheduled successfully!");
+        setTimeout(() => setSuccessMsg(null), 4000);
+      }
       fetchEvents();
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to schedule event");
@@ -557,6 +592,22 @@ export default function CalendarPage() {
                     </div>
                   </div>
                 )}
+
+                <div className="pt-2 border-t border-border/60">
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Additional Guest Emails (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. partner@client.com, colleague@ellowww.com"
+                    value={guestEmails}
+                    onChange={(e) => setGuestEmails(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-lg border border-border bg-white text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                  <p className="text-[10px] text-text-secondary mt-1">
+                    Separate multiple emails with commas. Each guest will receive a branded ClientHub email invite.
+                  </p>
+                </div>
               </div>
 
               <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-border shrink-0">

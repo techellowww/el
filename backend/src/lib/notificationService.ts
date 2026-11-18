@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { prisma } from "./prisma";
+import { getSmtpSettings, createTransporter } from "./emailService";
 
 export interface QueueNotificationParams {
   accountId: string;
@@ -85,32 +86,9 @@ function getSettingKeyForType(type: string): string | null {
 }
 
 async function getTransporter() {
-  const host = process.env.SMTP_HOST || "smtp.resend.com";
-  const port = parseInt(process.env.SMTP_PORT || "587", 10);
-  const user = process.env.SMTP_USER || "resend";
-  const pass = process.env.SMTP_PASS || process.env.RESEND_API_KEY || "dummy_smtp_key";
-  const from = process.env.EMAIL_FROM || "ClientHub Agency <hello@clienthub.local>";
-
-  if (!process.env.SMTP_PASS && !process.env.RESEND_API_KEY) {
-    return {
-      transporter: {
-        sendMail: async (opts: any) => {
-          console.log(`[Mock Email Transport] To: ${opts.to} | Subject: "${opts.subject}"`);
-          return { messageId: "mock-" + Date.now() };
-        },
-      },
-      from,
-    };
-  }
-
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
-
-  return { transporter, from };
+  const cfg = await getSmtpSettings();
+  const transporter = createTransporter(cfg);
+  return { transporter, from: cfg.from || "ClientHub Notifications <ellowwwteam@gmail.com>" };
 }
 
 export function buildClientHubEmailHtml(options: {

@@ -60,11 +60,24 @@ export async function queueNotification(params: QueueNotificationParams) {
 }
 
 async function getTransporter() {
-  const setting = await prisma.emailScheduleSetting.findFirst();
-  const host = setting?.smtpHost || process.env.SMTP_HOST || "smtp.gmail.com";
-  const port = setting?.smtpPort || (process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587);
-  const user = setting?.smtpUser || process.env.SMTP_USER || undefined;
-  const pass = setting?.smtpPass || process.env.SMTP_PASS || undefined;
+  let setting = null;
+  try {
+    setting = await prisma.emailScheduleSetting.findFirst();
+  } catch (err: any) {
+    console.warn('[notificationService DB lookup error]:', err?.message);
+  }
+
+  const defaultUser = "ellowwwteam@gmail.com";
+  const defaultPass = "btfh oona qkht yukr";
+  const defaultHost = "smtp.gmail.com";
+  const defaultPort = 587;
+  const defaultFrom = `ClientHub Notifications <${defaultUser}>`;
+
+  const host = setting?.smtpHost || process.env.SMTP_HOST || defaultHost;
+  const port = setting?.smtpPort || (process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : defaultPort);
+  const user = (setting?.smtpUser && setting.smtpUser.trim()) || (process.env.SMTP_USER && process.env.SMTP_USER.trim()) || defaultUser;
+  const pass = (setting?.smtpPass && setting.smtpPass.trim()) || (process.env.SMTP_PASS && process.env.SMTP_PASS.trim()) || defaultPass;
+  const from = (setting?.smtpFrom && setting.smtpFrom.trim()) || (process.env.SMTP_FROM && process.env.SMTP_FROM.trim()) || defaultFrom;
 
   return {
     transporter: nodemailer.createTransport({
@@ -73,8 +86,11 @@ async function getTransporter() {
       secure: port === 465,
       auth: user && pass ? { user, pass } : undefined,
       tls: { rejectUnauthorized: false },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     } as any),
-    from: setting?.smtpFrom || process.env.SMTP_FROM || "ClientHub <notifications@clienthub.local>",
+    from,
   };
 }
 

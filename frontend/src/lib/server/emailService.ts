@@ -10,14 +10,26 @@ export interface SmtpConfig {
 }
 
 export async function getSmtpSettings(): Promise<SmtpConfig> {
-  const setting = await prisma.emailScheduleSetting.findFirst();
-  return {
-    host: setting?.smtpHost || process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: setting?.smtpPort || (process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587),
-    user: setting?.smtpUser || process.env.SMTP_USER || undefined,
-    pass: setting?.smtpPass || process.env.SMTP_PASS || undefined,
-    from: setting?.smtpFrom || process.env.SMTP_FROM || 'ClientHub Notifications <notifications@clienthub.local>',
-  };
+  let setting = null;
+  try {
+    setting = await prisma.emailScheduleSetting.findFirst();
+  } catch (err: any) {
+    console.warn('[getSmtpSettings DB lookup error]:', err?.message);
+  }
+
+  const defaultUser = 'ellowwwteam@gmail.com';
+  const defaultPass = 'btfh oona qkht yukr';
+  const defaultHost = 'smtp.gmail.com';
+  const defaultPort = 587;
+  const defaultFrom = `ClientHub Notifications <${defaultUser}>`;
+
+  const host = setting?.smtpHost || process.env.SMTP_HOST || defaultHost;
+  const port = setting?.smtpPort || (process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : defaultPort);
+  const user = (setting?.smtpUser && setting.smtpUser.trim()) || (process.env.SMTP_USER && process.env.SMTP_USER.trim()) || defaultUser;
+  const pass = (setting?.smtpPass && setting.smtpPass.trim()) || (process.env.SMTP_PASS && process.env.SMTP_PASS.trim()) || defaultPass;
+  const from = (setting?.smtpFrom && setting.smtpFrom.trim()) || (process.env.SMTP_FROM && process.env.SMTP_FROM.trim()) || defaultFrom;
+
+  return { host, port, user, pass, from };
 }
 
 export function createTransporter(cfg: SmtpConfig) {
@@ -27,6 +39,9 @@ export function createTransporter(cfg: SmtpConfig) {
     secure: cfg.port === 465,
     auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
     tls: { rejectUnauthorized: false },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   } as any);
 }
 

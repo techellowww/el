@@ -134,11 +134,13 @@ export async function createCalendarEvent(params: CreateEventParams) {
       const cId = (raw as any).clientId || raw.userId || params.clientId;
       if (cId) {
         const clientRecord = await prisma.client.findFirst({
-          where: { id: cId, accountId: params.accountId },
+          where: { id: cId, ...(params.accountId ? { accountId: params.accountId } : {}) },
           select: { id: true, name: true, email: true },
         });
-        if (clientRecord && clientRecord.email) {
-          email = clientRecord.email.trim().toLowerCase();
+        if (clientRecord) {
+          if (clientRecord.email?.trim()) {
+            email = clientRecord.email.trim().toLowerCase();
+          }
           name = clientRecord.name || name;
           isClient = true;
           userId = null;
@@ -147,11 +149,13 @@ export async function createCalendarEvent(params: CreateEventParams) {
     } else if (userId) {
       // 2. Employee: retrieve official email address directly from Employee module (User model)
       const userRecord = await prisma.user.findFirst({
-        where: { id: userId, accountId: params.accountId },
+        where: { id: userId, ...(params.accountId ? { accountId: params.accountId } : {}) },
         select: { id: true, name: true, email: true },
       });
-      if (userRecord && userRecord.email) {
-        email = userRecord.email.trim().toLowerCase();
+      if (userRecord) {
+        if (userRecord.email?.trim()) {
+          email = userRecord.email.trim().toLowerCase();
+        }
         name = userRecord.name || name;
         userId = userRecord.id;
         isClient = false;
@@ -159,20 +163,24 @@ export async function createCalendarEvent(params: CreateEventParams) {
     } else if (email) {
       // 3. Fallback: match by email against Client module or Employee module
       const clientRecord = await prisma.client.findFirst({
-        where: { email: { equals: email, mode: "insensitive" }, accountId: params.accountId },
+        where: { email: { equals: email, mode: "insensitive" }, ...(params.accountId ? { accountId: params.accountId } : {}) },
         select: { id: true, name: true, email: true },
       });
-      if (clientRecord && clientRecord.email) {
-        email = clientRecord.email.trim().toLowerCase();
+      if (clientRecord) {
+        if (clientRecord.email?.trim()) {
+          email = clientRecord.email.trim().toLowerCase();
+        }
         name = clientRecord.name || name;
         isClient = true;
       } else {
         const userRecord = await prisma.user.findFirst({
-          where: { email: { equals: email, mode: "insensitive" }, accountId: params.accountId },
+          where: { email: { equals: email, mode: "insensitive" }, ...(params.accountId ? { accountId: params.accountId } : {}) },
           select: { id: true, name: true, email: true },
         });
-        if (userRecord && userRecord.email) {
-          email = userRecord.email.trim().toLowerCase();
+        if (userRecord) {
+          if (userRecord.email?.trim()) {
+            email = userRecord.email.trim().toLowerCase();
+          }
           name = userRecord.name || name;
           userId = userRecord.id;
           isClient = false;
@@ -229,12 +237,18 @@ export async function createCalendarEvent(params: CreateEventParams) {
 
   // Configure transporter using existing SMTP settings
   let transporter: any = null;
-  let smtpFrom = "ClientHub Notifications <notifications@clienthub.local>";
+  let smtpFrom = "ClientHub Notifications <ellowwwteam@gmail.com>";
+  let smtpInitError: string | null = null;
   try {
     const cfg = await getSmtpSettings();
     smtpFrom = cfg.from || smtpFrom;
-    transporter = createTransporter(cfg);
+    if (!cfg.user || !cfg.pass) {
+      smtpInitError = "SMTP user or password credentials are not configured";
+    } else {
+      transporter = createTransporter(cfg);
+    }
   } catch (cfgErr: any) {
+    smtpInitError = cfgErr.message || "Failed to initialize SMTP transporter";
     console.error("[createCalendarEvent SMTP config error]:", cfgErr.message);
   }
 
@@ -255,6 +269,13 @@ export async function createCalendarEvent(params: CreateEventParams) {
     minute: "2-digit",
     hour12: true,
   });
+
+  const replyTo =
+    account?.replyToEmail && !account.replyToEmail.endsWith(".local") && account.replyToEmail.includes("@")
+      ? account.replyToEmail
+      : creator?.email && !creator.email.endsWith(".local") && creator.email.includes("@")
+      ? creator.email
+      : undefined;
 
   for (const attendee of resolvedAttendees) {
     const lines = [
@@ -304,18 +325,36 @@ export async function createCalendarEvent(params: CreateEventParams) {
       },
     });
 
+    // Internal placeholder accounts (e.g. admin@clienthub.local) are simulated without hitting external SMTP
+    if (attendee.email.toLowerCase().endsWith(".local")) {
+      await prisma.notification.update({
+        where: { id: notif.id },
+        data: {
+          status: "SENT",
+          sentAt: new Date(),
+          errorLog: "Internal test account — simulated delivery",
+        },
+      });
+      invitationResults.sent.push({
+        email: attendee.email,
+        name: attendee.name,
+      });
+      continue;
+    }
+
     if (!transporter) {
+      const errReason = smtpInitError || "SMTP transporter could not be initialized";
       await prisma.notification.update({
         where: { id: notif.id },
         data: {
           status: "FAILED",
-          errorLog: "SMTP transporter could not be initialized",
+          errorLog: errReason,
         },
       });
       invitationResults.failed.push({
         email: attendee.email,
         name: attendee.name,
-        error: "SMTP transporter could not be initialized",
+        error: errReason,
       });
       continue;
     }
@@ -325,7 +364,7 @@ export async function createCalendarEvent(params: CreateEventParams) {
       await transporter.sendMail({
         from: smtpFrom,
         to: attendee.email,
-        replyTo: account?.replyToEmail || creator?.email || undefined,
+        replyTo,
         subject: `Meeting Invitation: ${event.title}`,
         html: emailHtml,
       });
