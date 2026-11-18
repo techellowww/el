@@ -105,7 +105,7 @@ async function testCalendarMeetingInvitationSuite() {
   assert(Boolean(employeeAttendee), '7. Employee attendee exists in event record');
   assert(employeeAttendee.email.toLowerCase() === testEmployee.email.toLowerCase(), '8. Employee email matches email stored in Employee module');
 
-  // 7. Verify Notification / Email records created in database
+  // 7. Verify NO Email notifications created for meeting
   const notifications = await prisma.notification.findMany({
     where: {
       accountId: account.id,
@@ -114,23 +114,7 @@ async function testCalendarMeetingInvitationSuite() {
     },
   });
 
-  assert(notifications.length === 2, '9. Exactly 2 email notification records generated (one per selected participant)');
-
-  const clientNotif = notifications.find((n: any) => n.recipientEmail.toLowerCase() === testClient.email.toLowerCase());
-  const employeeNotif = notifications.find((n: any) => n.recipientEmail.toLowerCase() === testEmployee.email.toLowerCase());
-
-  assert(Boolean(clientNotif), '10. Email invitation generated for selected client');
-  assert(Boolean(employeeNotif), '11. Email invitation generated for selected employee');
-
-  // 8. Verify email content has all required details
-  const bodyHtml = clientNotif?.bodyHtml || '';
-  assert(bodyHtml.includes(meetingTitle), '12. Email body contains meeting title');
-  assert(bodyHtml.includes(meetingDescription), '13. Email body contains meeting description');
-  assert(bodyHtml.includes(meetLink), '14. Email body contains Google Meet / meeting link');
-  assert(bodyHtml.includes('Start Time:'), '15. Email body contains Start Time');
-  assert(bodyHtml.includes('End Time:'), '16. Email body contains End Time');
-  assert(bodyHtml.includes('Date:'), '17. Email body contains Date');
-  assert(bodyHtml.includes('Join Meeting / Google Meet'), '18. Email body contains prominent Join Meeting / Google Meet CTA button');
+  assert(notifications.length === 0, '9. Email notifications are NOT sent for meetings (email invites disabled)');
 
   // 9. Verify .ics content generator
   const ics = generateIcsInvite({
@@ -256,7 +240,7 @@ async function testCalendarMeetingInvitationSuite() {
   assert(Boolean(projClientAtt), '29. Project Client automatically included in meeting attendees');
   assert(Boolean(projEmpAtt), '30. Project assigned employee automatically included in meeting attendees');
 
-  // Verify Project Meeting Email Invitations
+  // Verify Project Meeting Email Invitations are NOT sent
   const projNotifs = await prisma.notification.findMany({
     where: {
       accountId: account.id,
@@ -265,14 +249,9 @@ async function testCalendarMeetingInvitationSuite() {
     },
   });
   assert(
-    projNotifs.length === projectRecord!.client!.assignments.length + 1,
-    '31. Email notifications dispatched for Project meeting to all assigned users & client'
+    projNotifs.length === 0,
+    '31. Email notifications are NOT dispatched for Project meeting (email invites disabled)'
   );
-  const clientProjNotif = projNotifs.find((n: any) => n.recipientEmail.toLowerCase() === testClient.email.toLowerCase());
-  const employeeProjNotif = projNotifs.find((n: any) => n.recipientEmail.toLowerCase() === testEmployee.email.toLowerCase());
-  assert(Boolean(clientProjNotif), '32. Project client received email notification');
-  assert(Boolean(employeeProjNotif), '33. Project assigned employee received email notification');
-  assert(Boolean(clientProjNotif?.bodyHtml?.includes(projMeetLink)), '34. Project client email contains actual Google Meet link');
 
   // 10E. Employee Meeting Validation: Mandatory Project Field
   const employeeSessionRole = 'EMPLOYEE';

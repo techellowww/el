@@ -397,10 +397,10 @@ export default function DashboardPage() {
             </div>
           </div>
           <Link
-            href="/settings"
+            href="/mail"
             className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-xs whitespace-nowrap"
           >
-            Check Settings &rarr;
+            Check Mail Settings &rarr;
           </Link>
         </div>
       )}

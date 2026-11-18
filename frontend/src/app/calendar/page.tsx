@@ -218,26 +218,8 @@ export default function CalendarPage() {
       if (!res.ok) throw new Error(data.error || "Failed to create event");
 
       handleCloseModal();
-      
-      const sentCount = data.invitationResults?.sent?.length ?? 0;
-      const failedCount = data.invitationResults?.failed?.length ?? 0;
-
-      if (failedCount > 0 && sentCount === 0) {
-        setErrorMsg(
-          `Event scheduled, but email invitations failed to send to ${data.invitationResults.failed.map((f: any) => f.email).join(', ')}. Please verify SMTP settings in Settings.`
-        );
-      } else if (failedCount > 0 && sentCount > 0) {
-        setSuccessMsg(
-          `Event scheduled! Invitations sent to ${sentCount} participant(s). Delivery failed for: ${data.invitationResults.failed.map((f: any) => f.email).join(', ')}.`
-        );
-        setTimeout(() => setSuccessMsg(null), 6000);
-      } else if (sentCount > 0) {
-        setSuccessMsg(`Event scheduled and email invitations sent to ${sentCount} participant(s)!`);
-        setTimeout(() => setSuccessMsg(null), 5000);
-      } else {
-        setSuccessMsg("Event scheduled successfully!");
-        setTimeout(() => setSuccessMsg(null), 5000);
-      }
+      setSuccessMsg("Event scheduled successfully!");
+      setTimeout(() => setSuccessMsg(null), 4000);
       fetchEvents();
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to schedule event");
@@ -533,9 +515,9 @@ export default function CalendarPage() {
                 />
               </div>
 
-              {/* Attendee Invites */}
+              {/* Meeting Attendees */}
               <div className="p-3 rounded-xl bg-slate-50 border border-border space-y-2">
-                <span className="text-xs font-bold text-text-primary block">Invite Attendees (.ics Calendar Email)</span>
+                <span className="text-xs font-bold text-text-primary block">Meeting Attendees</span>
                 {clientId && (
                   <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
                     <input
@@ -544,7 +526,7 @@ export default function CalendarPage() {
                       onChange={(e) => setInviteClient(e.target.checked)}
                       className="rounded border-slate-300 text-primary"
                     />
-                    <span>Email .ics invite to Client</span>
+                    <span>Include Client</span>
                   </label>
                 )}
 
