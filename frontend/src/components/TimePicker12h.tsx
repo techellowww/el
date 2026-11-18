@@ -132,7 +132,7 @@ export function TimePicker12h({
             value={hour12}
             disabled={disabled}
             onChange={(e) => handleHourChange(Number(e.target.value))}
-            className={`w-full ${selectPadding} bg-white border border-border rounded-xl font-bold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center`}
+            className={`w-full ${selectPadding} bg-white border border-border rounded-xl font-bold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center no-custom-chevron`}
             aria-label={`${label || 'Time'} hour`}
             title="Hour"
           >
@@ -154,7 +154,7 @@ export function TimePicker12h({
             value={minute}
             disabled={disabled}
             onChange={(e) => handleMinuteChange(e.target.value)}
-            className={`w-full ${selectPadding} bg-white border border-border rounded-xl font-bold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center`}
+            className={`w-full ${selectPadding} bg-white border border-border rounded-xl font-bold text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none cursor-pointer text-center no-custom-chevron`}
             aria-label={`${label || 'Time'} minute`}
             title="Minute"
           >

@@ -406,22 +406,22 @@ export default function TimeSheetPage() {
               >
                 {projects.map((p) => {
                   const hasSubs = Array.isArray(p.subProjects) && p.subProjects.length > 0;
-                  const clientLabel = p.client?.name ? ` (${p.client.name})` : "";
+                  const clientLabel = p.client?.name ? ` · 🏢 ${p.client.name}` : "";
                   if (!hasSubs) {
                     return (
                       <option key={p.id} value={p.id}>
-                        {p.name}{clientLabel}
+                        📂 {p.name}{clientLabel}
                       </option>
                     );
                   }
                   return (
-                    <optgroup key={p.id} label={`${p.name}${clientLabel}`}>
+                    <optgroup key={p.id} label={`📁 ${p.name}${clientLabel}`}>
                       <option value={p.id}>
-                        {p.name} (General / Main)
+                        📂 {p.name} (General / Main)
                       </option>
                       {p.subProjects.map((sub: any) => (
                         <option key={sub.id} value={`${p.id}::${sub.id}::${sub.name}`}>
-                          ↳ {sub.name}
+                          ↳ 📌 {sub.name}
                         </option>
                       ))}
                     </optgroup>
@@ -645,10 +645,10 @@ export default function TimeSheetPage() {
               onChange={(e) => setFilterProjectId(e.target.value)}
               className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-2xs"
             >
-              <option value="">All Projects ({projects.length})</option>
+              <option value="">📁 All Projects ({projects.length})</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} {p.client?.name ? `(${p.client.name})` : ""}
+                  📂 {p.name} {p.client?.name ? `(${p.client.name})` : ""}
                 </option>
               ))}
             </select>
@@ -665,10 +665,10 @@ export default function TimeSheetPage() {
                 onChange={(e) => setFilterUserId(e.target.value)}
                 className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-2xs"
               >
-                <option value="">All Team Members ({employees.length || "Everyone"})</option>
+                <option value="">👥 All Team Members ({employees.length || "Everyone"})</option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
-                    {emp.name} ({emp.role})
+                    👤 {emp.name} ({emp.role})
                   </option>
                 ))}
               </select>

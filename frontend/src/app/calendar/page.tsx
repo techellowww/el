@@ -456,10 +456,10 @@ export default function CalendarPage() {
                     onChange={(e) => handleClientChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-border bg-white text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
-                    <option value="">None / Internal Event</option>
+                    <option value="">🏢 None / Internal Agency Event</option>
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name}
+                        🏢 {c.name} {c.company ? `(${c.company})` : ""}
                       </option>
                     ))}
                   </select>
@@ -475,12 +475,12 @@ export default function CalendarPage() {
                     required={!isAdmin}
                     className="w-full px-3 py-2 rounded-xl border border-border bg-white text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
-                    <option value="">{isAdmin ? "None" : "Select Project (Required)"}</option>
+                    <option value="">{isAdmin ? "📁 None / General Meeting" : "📁 Select Project (Required)"}</option>
                     {projects
                       .filter((p) => !clientId || p.clientId === clientId)
                       .map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name}
+                          📂 {p.name}
                         </option>
                       ))}
                   </select>

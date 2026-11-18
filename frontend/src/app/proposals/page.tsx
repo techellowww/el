@@ -614,10 +614,10 @@ export default function ProposalsPage() {
                     required
                     className="w-full px-3 py-2 rounded-xl border border-border bg-white text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
-                    <option value="">Select Client</option>
+                    <option value="">🏢 Select Client *</option>
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name} {c.company ? `(${c.company})` : ""}
+                        🏢 {c.name} {c.company ? `(${c.company})` : ""}
                       </option>
                     ))}
                   </select>
@@ -630,12 +630,12 @@ export default function ProposalsPage() {
                     onChange={(e) => setSelectedProjectId(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-border bg-white text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
-                    <option value="">None / New Project</option>
+                    <option value="">📁 None / New Project</option>
                     {projects
                       .filter((p) => !selectedClientId || p.clientId === selectedClientId)
                       .map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name}
+                          📂 {p.name}
                         </option>
                       ))}
                   </select>

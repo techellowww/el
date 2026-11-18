@@ -298,25 +298,25 @@ export default function DashboardPage() {
                   onChange={(e) => setQuickProjectId(e.target.value)}
                   className="w-full text-xs px-3 py-2 bg-white border border-border rounded-lg text-text-primary focus:outline-none focus:border-primary truncate"
                 >
-                  <option value="">Select project to track...</option>
+                  <option value="">⏱️ Select project to track time...</option>
                   {projects.map((p) => {
                     const hasSubs = Array.isArray(p.subProjects) && p.subProjects.length > 0;
-                    const clientLabel = p.client?.name ? ` (${p.client.name})` : "";
+                    const clientLabel = p.client?.name ? ` · 🏢 ${p.client.name}` : "";
                     if (!hasSubs) {
                       return (
                         <option key={p.id} value={p.id}>
-                          {p.name}{clientLabel}
+                          📂 {p.name}{clientLabel}
                         </option>
                       );
                     }
                     return (
-                      <optgroup key={p.id} label={`${p.name}${clientLabel}`}>
+                      <optgroup key={p.id} label={`📁 ${p.name}${clientLabel}`}>
                         <option value={p.id}>
-                          {p.name} (General / Main)
+                          📂 {p.name} (General / Main)
                         </option>
                         {p.subProjects.map((sub: any) => (
                           <option key={sub.id} value={`${p.id}::${sub.id}::${sub.name}`}>
-                            ↳ {sub.name}
+                            ↳ 📌 {sub.name}
                           </option>
                         ))}
                       </optgroup>

@@ -279,9 +279,63 @@ textarea::placeholder {
   color: #94A3B8 !important;
 }
 
+/* Modern Enterprise Select & Option Listing Styles */
+select:not(.no-custom-chevron) {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='2' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.25rem !important;
+  cursor: pointer;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+select.rounded-full {
+  background-position: right 0.6rem center;
+  background-size: 0.85rem 0.85rem;
+  padding-right: 1.85rem !important;
+}
+
+select:not(:disabled):hover {
+  border-color: #CBD5E1;
+}
+
+select:focus {
+  border-color: #2563EB;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
 select option {
-  color: #000000;
+  color: #0F172A;
   background-color: #FFFFFF;
+  padding: 10px 14px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+select option:checked {
+  background-color: #EFF6FF !important;
+  color: #1D4ED8 !important;
+  font-weight: 600;
+}
+
+select option:disabled {
+  color: #94A3B8;
+  background-color: #F8FAFC;
+}
+
+select optgroup {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #475569;
+  background-color: #F8FAFC;
+  padding: 8px 12px 4px 12px;
 }
 
 input:disabled,
