@@ -628,13 +628,13 @@ export default function MailModulePage() {
                           disabled={!isAdmin}
                           className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-primary shadow-xs transition"
                         >
-                          <option value="MON">📅 Monday — Start of Business Week</option>
-                          <option value="TUE">📅 Tuesday</option>
-                          <option value="WED">📅 Wednesday — Mid-Week Progress</option>
-                          <option value="THU">📅 Thursday</option>
-                          <option value="FRI">📅 Friday — End of Week (Recommended)</option>
-                          <option value="SAT">📅 Saturday</option>
-                          <option value="SUN">📅 Sunday</option>
+                          <option value="MON">Monday — Start of Business Week</option>
+                          <option value="TUE">Tuesday</option>
+                          <option value="WED">Wednesday — Mid-Week Progress</option>
+                          <option value="THU">Thursday</option>
+                          <option value="FRI">Friday — End of Week (Recommended)</option>
+                          <option value="SAT">Saturday</option>
+                          <option value="SUN">Sunday</option>
                         </select>
                       </div>
                     )}
@@ -656,16 +656,16 @@ export default function MailModulePage() {
                           {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
                             <option key={d} value={d}>
                               {d === 1
-                                ? '🗓️ 1st of month (Start of Billing Cycle)'
+                                ? '1st of month (Start of Billing Cycle)'
                                 : d === 2
-                                ? '🗓️ 2nd of month'
+                                ? '2nd of month'
                                 : d === 3
-                                ? '🗓️ 3rd of month'
+                                ? '3rd of month'
                                 : d === 15
-                                ? '🗓️ 15th of month (Mid-Month Review)'
+                                ? '15th of month (Mid-Month Review)'
                                 : d === 28
-                                ? '🗓️ 28th of month (Month-End Close)'
-                                : `🗓️ ${d}th of month`}
+                                ? '28th of month (Month-End Close)'
+                                : `${d}th of month`}
                             </option>
                           ))}
                         </select>

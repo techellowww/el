@@ -241,12 +241,12 @@ export default function SettingsPage() {
                 onChange={(e) => setCurrency(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-border bg-white text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
-                <option value="USD">💵 USD ($) — United States Dollar</option>
-                <option value="EUR">💶 EUR (€) — Eurozone</option>
-                <option value="GBP">💷 GBP (£) — British Pound</option>
-                <option value="INR">₹ INR (₹) — Indian Rupee (Paise)</option>
-                <option value="CAD">💲 CAD ($) — Canadian Dollar</option>
-                <option value="AUD">💲 AUD ($) — Australian Dollar</option>
+                <option value="USD">USD ($) — United States Dollar</option>
+                <option value="EUR">EUR (€) — Eurozone</option>
+                <option value="GBP">GBP (£) — British Pound</option>
+                <option value="INR">INR (₹) — Indian Rupee (Paise)</option>
+                <option value="CAD">CAD ($) — Canadian Dollar</option>
+                <option value="AUD">AUD ($) — Australian Dollar</option>
               </select>
             </div>
           </div>

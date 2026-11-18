@@ -523,14 +523,14 @@ export default function OfficeTimingsPage() {
                 onChange={(e) => setTimezone(e.target.value)}
                 className="w-full py-2.5 px-3 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary font-mono cursor-pointer"
               >
-                <option value="Asia/Kolkata">🇮🇳 Asia/Kolkata (IST — UTC+05:30) · Default</option>
-                <option value="UTC">🌐 UTC (Coordinated Universal Time)</option>
-                <option value="America/New_York">🇺🇸 America/New_York (EST / EDT — UTC-05:00)</option>
-                <option value="America/Los_Angeles">🇺🇸 America/Los_Angeles (PST / PDT — UTC-08:00)</option>
-                <option value="Europe/London">🇬🇧 Europe/London (GMT / BST — UTC+00:00)</option>
-                <option value="Europe/Berlin">🇩🇪 Europe/Berlin (CET / CEST — UTC+01:00)</option>
-                <option value="Asia/Dubai">🇦🇪 Asia/Dubai (GST — UTC+04:00)</option>
-                <option value="Asia/Singapore">🇸🇬 Asia/Singapore (SGT — UTC+08:00)</option>
+                <option value="Asia/Kolkata">Asia/Kolkata (IST — UTC+05:30) · Default</option>
+                <option value="UTC">UTC (Coordinated Universal Time)</option>
+                <option value="America/New_York">America/New_York (EST / EDT — UTC-05:00)</option>
+                <option value="America/Los_Angeles">America/Los_Angeles (PST / PDT — UTC-08:00)</option>
+                <option value="Europe/London">Europe/London (GMT / BST — UTC+00:00)</option>
+                <option value="Europe/Berlin">Europe/Berlin (CET / CEST — UTC+01:00)</option>
+                <option value="Asia/Dubai">Asia/Dubai (GST — UTC+04:00)</option>
+                <option value="Asia/Singapore">Asia/Singapore (SGT — UTC+08:00)</option>
               </select>
             </div>
           </div>

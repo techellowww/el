@@ -624,8 +624,8 @@ export default function EmployeesPage() {
                   onChange={(e) => setRole(e.target.value as "ADMIN" | "EMPLOYEE")}
                   className="w-full px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 >
-                  <option value="EMPLOYEE">👤 Staff Employee — Access limited to assigned client portfolio</option>
-                  <option value="ADMIN">👑 Agency Admin — Full executive access across all modules</option>
+                  <option value="EMPLOYEE">Staff Employee — Access limited to assigned client portfolio</option>
+                  <option value="ADMIN">Agency Admin — Full executive access across all modules</option>
                 </select>
               </div>
 

@@ -531,10 +531,10 @@ export default function ProjectsPage() {
                             }
                             className={`label-text font-medium px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none ${stageBadge.bg}`}
                           >
-                            <option value="DISCOVERY">🔍 Discovery</option>
-                            <option value="IN_PROGRESS">⚡ In Progress</option>
-                            <option value="AWAITING_REVIEW">📋 Awaiting Review</option>
-                            <option value="LIVE">🚀 Live Site</option>
+                            <option value="DISCOVERY">Discovery</option>
+                            <option value="IN_PROGRESS">In Progress</option>
+                            <option value="AWAITING_REVIEW">Awaiting Review</option>
+                            <option value="LIVE">Live Site</option>
                           </select>
 
                           <div className="flex items-center gap-1 border-l border-border pl-2">
@@ -675,10 +675,10 @@ export default function ProjectsPage() {
                                         }
                                         className={`text-[11px] font-medium px-2 py-0.5 rounded-full border cursor-pointer focus:outline-none ${subBadge.bg}`}
                                       >
-                                        <option value="DISCOVERY">🔍 Discovery</option>
-                                        <option value="IN_PROGRESS">⚡ In Progress</option>
-                                        <option value="AWAITING_REVIEW">📋 Review</option>
-                                        <option value="LIVE">✅ Live / Done</option>
+                                        <option value="DISCOVERY">Discovery</option>
+                                        <option value="IN_PROGRESS">In Progress</option>
+                                        <option value="AWAITING_REVIEW">Review</option>
+                                        <option value="LIVE">Live / Done</option>
                                       </select>
                                     ) : (
                                       <span className={`text-[11px] px-2 py-0.5 rounded-full border ${subBadge.bg}`}>
@@ -827,10 +827,10 @@ export default function ProjectsPage() {
                   onChange={(e) => setNewClientId(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 >
-                  <option value="" disabled>— Select Client Portfolio —</option>
+                  <option value="" disabled>Select Client Portfolio</option>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>
-                      🏢 {c.name} {c.company ? `(${c.company})` : ""}
+                      {c.name} {c.company ? `(${c.company})` : ""}
                     </option>
                   ))}
                 </select>
@@ -872,10 +872,10 @@ export default function ProjectsPage() {
                   onChange={(e) => setNewStage(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 >
-                  <option value="DISCOVERY">🔍 Discovery — Initial Scoping & Architecture</option>
-                  <option value="IN_PROGRESS">⚡ In Progress — Active Sprint & Development</option>
-                  <option value="AWAITING_REVIEW">📋 Awaiting Review — Ready for Client Acceptance</option>
-                  <option value="LIVE">🚀 Live Site — Production Deployed</option>
+                  <option value="DISCOVERY">Discovery — Initial Scoping & Architecture</option>
+                  <option value="IN_PROGRESS">In Progress — Active Sprint & Development</option>
+                  <option value="AWAITING_REVIEW">Awaiting Review — Ready for Client Acceptance</option>
+                  <option value="LIVE">Live Site — Production Deployed</option>
                 </select>
               </div>
 
@@ -974,7 +974,7 @@ export default function ProjectsPage() {
                 >
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>
-                      🏢 {c.name} {c.company ? `(${c.company})` : ""}
+                      {c.name} {c.company ? `(${c.company})` : ""}
                     </option>
                   ))}
                 </select>
@@ -1016,10 +1016,10 @@ export default function ProjectsPage() {
                   onChange={(e) => setEditStage(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 >
-                  <option value="DISCOVERY">🔍 Discovery — Initial Scoping & Architecture</option>
-                  <option value="IN_PROGRESS">⚡ In Progress — Active Sprint & Development</option>
-                  <option value="AWAITING_REVIEW">📋 Awaiting Review — Ready for Client Acceptance</option>
-                  <option value="LIVE">🚀 Live Site — Production Deployed</option>
+                  <option value="DISCOVERY">Discovery — Initial Scoping & Architecture</option>
+                  <option value="IN_PROGRESS">In Progress — Active Sprint & Development</option>
+                  <option value="AWAITING_REVIEW">Awaiting Review — Ready for Client Acceptance</option>
+                  <option value="LIVE">Live Site — Production Deployed</option>
                 </select>
               </div>
 
@@ -1306,10 +1306,10 @@ export default function ProjectsPage() {
                   onChange={(e) => setSubStage(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary focus:outline-none focus:border-primary cursor-pointer font-medium"
                 >
-                  <option value="DISCOVERY">🔍 Discovery — Planning & Scope</option>
-                  <option value="IN_PROGRESS">⚡ In Progress — In Active Work</option>
-                  <option value="AWAITING_REVIEW">📋 Awaiting Review — Ready for QA</option>
-                  <option value="LIVE">✅ Live / Done — Delivered</option>
+                  <option value="DISCOVERY">Discovery — Planning & Scope</option>
+                  <option value="IN_PROGRESS">In Progress — In Active Work</option>
+                  <option value="AWAITING_REVIEW">Awaiting Review — Ready for QA</option>
+                  <option value="LIVE">Live / Done — Delivered</option>
                 </select>
               </div>
 

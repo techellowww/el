@@ -870,12 +870,12 @@ export default function ScreenshotModulePage() {
                 disabled={!isAdmin || isSaving}
                 className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs sm:text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition font-medium cursor-pointer"
               >
-                <option value={30}>🗓️ 1 Month (30 Days) — Recommended Default</option>
-                <option value={60}>🗓️ 2 Months (60 Days)</option>
-                <option value={90}>🗓️ 3 Months (90 Days) — Quarterly Archive</option>
-                <option value={180}>🗓️ 6 Months (180 Days) — Half-Year Compliance</option>
-                <option value={15}>⚡ 15 Days — Fast Storage Recovery</option>
-                <option value={7}>⚡ 7 Days (Aggressive Cleanup)</option>
+                <option value={30}>1 Month (30 Days) — Recommended Default</option>
+                <option value={60}>2 Months (60 Days)</option>
+                <option value={90}>3 Months (90 Days) — Quarterly Archive</option>
+                <option value={180}>6 Months (180 Days) — Half-Year Compliance</option>
+                <option value={15}>15 Days — Fast Storage Recovery</option>
+                <option value={7}>7 Days (Aggressive Cleanup)</option>
               </select>
             </div>
 
@@ -1063,10 +1063,10 @@ export default function ScreenshotModulePage() {
               onChange={(e) => setFilterUserId(e.target.value)}
               className="w-full h-9 bg-white border border-border rounded-lg px-2.5 text-xs text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer font-medium"
             >
-              <option value="ALL">👥 All Employees ({employeesList.length})</option>
+              <option value="ALL">All Employees ({employeesList.length})</option>
               {employeesList.map((emp) => (
                 <option key={emp.id} value={emp.id}>
-                  👤 {emp.name} {emp.employeeId ? `(${emp.employeeId})` : ""}
+                  {emp.name} {emp.employeeId ? `(${emp.employeeId})` : ""}
                 </option>
               ))}
             </select>
@@ -1099,10 +1099,10 @@ export default function ScreenshotModulePage() {
               onChange={(e) => setFilterProjectId(e.target.value)}
               className="w-full h-9 bg-white border border-border rounded-lg px-2.5 text-xs text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer font-medium truncate"
             >
-              <option value="ALL">📁 All Projects ({projectsList.length})</option>
+              <option value="ALL">All Projects ({projectsList.length})</option>
               {projectsList.map((proj) => (
                 <option key={proj.id} value={proj.id}>
-                  📂 {proj.name}
+                  {proj.name}
                 </option>
               ))}
             </select>
