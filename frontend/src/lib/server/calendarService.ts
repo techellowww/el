@@ -1,4 +1,6 @@
 import { prisma } from "../prisma";
+import { buildClientHubEmailHtml } from "./notificationService";
+import { getSmtpSettings, createTransporter } from "./emailService";
 
 export interface CreateEventParams {
   accountId: string;
@@ -220,12 +222,146 @@ export async function createCalendarEvent(params: CreateEventParams) {
     },
   });
 
-  return {
-    event,
-    invitationResults: {
-      sent: [],
-      failed: [],
-    },
+  const invitationResults = {
+    sent: [] as Array<{ email: string; name: string }>,
+    failed: [] as Array<{ email: string; name: string; error: string }>,
   };
+
+  // Configure transporter using existing SMTP settings
+  let transporter: any = null;
+  let smtpFrom = "ClientHub Notifications <notifications@clienthub.local>";
+  try {
+    const cfg = await getSmtpSettings();
+    smtpFrom = cfg.from || smtpFrom;
+    transporter = createTransporter(cfg);
+  } catch (cfgErr: any) {
+    console.error("[createCalendarEvent SMTP config error]:", cfgErr.message);
+  }
+
+  // Format date and time for invitation email body
+  const dateStr = start.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  const timeStartStr = start.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const timeEndStr = end.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  for (const attendee of resolvedAttendees) {
+    const lines = [
+      `Hello ${attendee.name || "there"},`,
+      `You have been invited to a meeting scheduled by ${creator?.name || account?.name || "your agency"}.`,
+      `<strong>Meeting Title:</strong> ${event.title}`,
+      `<strong>Date:</strong> ${dateStr}`,
+      `<strong>Start Time:</strong> ${timeStartStr}`,
+      `<strong>End Time:</strong> ${timeEndStr}`,
+    ];
+
+    if (event.description?.trim()) {
+      lines.push(`<strong>Meeting Description:</strong> ${event.description.trim()}`);
+    }
+
+    if (meetingLink) {
+      lines.push(
+        `<strong>Meeting Link:</strong> <a href="${meetingLink}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline;">${meetingLink}</a>`
+      );
+    }
+
+    const emailHtml = buildClientHubEmailHtml({
+      agencyName: account?.name || "Acme Digital Agency Global",
+      agencyLogoUrl: account?.logoUrl,
+      heading: `Meeting Invitation: ${event.title}`,
+      messageLines: lines,
+      buttonText: meetingLink ? "Join Meeting / Google Meet" : undefined,
+      buttonUrl: meetingLink || undefined,
+    });
+
+    // Record notification in database
+    const notif = await prisma.notification.create({
+      data: {
+        accountId: params.accountId,
+        type: "MEETING_INVITE",
+        recipientEmail: attendee.email,
+        subject: `Meeting Invitation: ${event.title}`,
+        bodyHtml: emailHtml,
+        metadata: JSON.stringify({
+          eventId: event.id,
+          title: event.title,
+          startTime: start.toISOString(),
+          endTime: end.toISOString(),
+          locationUrl: meetingLink || event.locationUrl,
+        }),
+        status: "QUEUED",
+      },
+    });
+
+    if (!transporter) {
+      await prisma.notification.update({
+        where: { id: notif.id },
+        data: {
+          status: "FAILED",
+          errorLog: "SMTP transporter could not be initialized",
+        },
+      });
+      invitationResults.failed.push({
+        email: attendee.email,
+        name: attendee.name,
+        error: "SMTP transporter could not be initialized",
+      });
+      continue;
+    }
+
+    try {
+      // Send clean branded HTML card WITHOUT .ics attachment so email clients (Zoho/Gmail) do not inject the calendar RSVP banner
+      await transporter.sendMail({
+        from: smtpFrom,
+        to: attendee.email,
+        replyTo: account?.replyToEmail || creator?.email || undefined,
+        subject: `Meeting Invitation: ${event.title}`,
+        html: emailHtml,
+      });
+
+      // Update notification status to SENT only upon successful delivery
+      await prisma.notification.update({
+        where: { id: notif.id },
+        data: {
+          status: "SENT",
+          sentAt: new Date(),
+          errorLog: null,
+        },
+      });
+
+      invitationResults.sent.push({
+        email: attendee.email,
+        name: attendee.name,
+      });
+    } catch (sendErr: any) {
+      console.error(`[Meeting Invite Delivery Failed for ${attendee.email}]:`, sendErr.message);
+      await prisma.notification.update({
+        where: { id: notif.id },
+        data: {
+          status: "FAILED",
+          errorLog: sendErr.message || "Failed to deliver meeting invitation email",
+        },
+      });
+
+      invitationResults.failed.push({
+        email: attendee.email,
+        name: attendee.name,
+        error: sendErr.message || "Failed to deliver email",
+      });
+    }
+  }
+
+  return { event, invitationResults };
 }
 

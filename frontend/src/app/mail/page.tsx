@@ -906,75 +906,111 @@ export default function MailModulePage() {
               </div>
             </div>
 
-            {/* Generated Report Preview Card */}
+            {/* Generated Report Preview Card matching ClientHub Email Template */}
             {generatedReport && (
               <div
                 id="generated-report-preview"
                 data-testid="generated-report-preview"
-                className="mt-3 p-4 rounded-xl bg-slate-50 border border-border space-y-3 animate-in fade-in duration-200"
+                className="mt-4 rounded-xl bg-white border border-border shadow-xs overflow-hidden animate-in fade-in duration-200"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-text-primary uppercase tracking-wider">
-                    Report Summary
-                  </span>
-                  <span className="text-[11px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
-                    {generatedReport.startDate} &rarr; {generatedReport.endDate}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2.5 rounded-lg bg-white border border-border shadow-xs">
-                    <p className="text-[10px] text-text-secondary uppercase font-semibold">Total Hours</p>
-                    <p className="text-sm font-mono font-bold text-text-primary mt-0.5">
-                      {generatedReport.totalHoursFormatted}
-                    </p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-green-50/60 border border-green-200">
-                    <p className="text-[10px] text-success uppercase font-semibold">Inside Hours</p>
-                    <p className="text-sm font-mono font-bold text-success mt-0.5">
-                      {generatedReport.regularHoursFormatted || '0.00 hrs'}
-                    </p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-amber-50/60 border border-amber-200">
-                    <p className="text-[10px] text-amber-700 uppercase font-semibold">Outside Hours</p>
-                    <p className="text-sm font-mono font-bold text-amber-600 mt-0.5">
-                      {generatedReport.outsideHoursFormatted || '0.00 hrs'}
-                    </p>
+                {/* Header with Agency Branding (matching email card) */}
+                <div className="py-4 px-6 border-b border-slate-100 text-center bg-white">
+                  {user?.account?.logoUrl ? (
+                    <img
+                      src={user.account.logoUrl}
+                      alt={user.account.name || "Agency"}
+                      className="max-h-8 max-w-[160px] mx-auto object-contain mb-1"
+                    />
+                  ) : (
+                    <div className="text-base font-extrabold text-[#1e3a8a] tracking-tight">
+                      {user?.account?.name || "Acme Digital Agency Global"}
+                    </div>
+                  )}
+                  <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mt-0.5">
+                    {(user?.account?.name || "Acme Digital Agency Global")} Secure Portal
                   </div>
                 </div>
 
-                {/* Employee Hours Breakdown */}
-                {generatedReport.employeeBreakdown && generatedReport.employeeBreakdown.length > 0 ? (
-                  <div className="space-y-1.5 pt-2 border-t border-border">
-                    <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">
-                      Employee Hours Breakdown
+                <div className="p-5 sm:p-6 space-y-4">
+                  {/* Heading */}
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+                      Time Report: {generatedReport.startDate} to {generatedReport.endDate}
+                    </h3>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Here is the automated summary of tracked time entries for your agency.
                     </p>
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {generatedReport.employeeBreakdown.map((emp) => (
-                        <div
-                          key={emp.user.id}
-                          className="flex items-center justify-between text-xs py-2 px-2.5 rounded-lg bg-white border border-border shadow-xs"
-                        >
-                          <div>
-                            <span className="font-semibold text-text-primary block">{emp.user.name}</span>
-                            <span className="text-[10px] text-text-secondary font-mono">[{emp.user.employeeId}]</span>
-                          </div>
-                          <div className="text-right">
-                            <span className="font-mono text-text-primary font-bold block">{emp.totalHoursFormatted}</span>
-                            <span className="text-[10px] text-text-secondary">
-                              <span className="text-success">Inside: {emp.regularHoursFormatted}</span> &nbsp;&bull;&nbsp; 
-                              <span className="text-amber-600">Outside: {emp.outsideHoursFormatted}</span>
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                  </div>
+
+                  {/* Summary Box */}
+                  <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                    <p className="text-slate-700">
+                      <strong>Date Range:</strong> {generatedReport.startDate} to {generatedReport.endDate}
+                    </p>
+                    <p className="text-slate-700">
+                      <strong>Total Tracked:</strong>{" "}
+                      <span className="font-bold text-slate-900">{generatedReport.totalHoursFormatted}</span> across{" "}
+                      {generatedReport.totalEntriesCount} recorded entries
+                    </p>
+                    <div className="flex items-center gap-3 pt-1 text-[11px] text-slate-500">
+                      <span>
+                        Inside Hours: <strong className="text-emerald-700">{generatedReport.regularHoursFormatted || "0.00 hrs"}</strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        Outside Hours: <strong className="text-amber-700">{generatedReport.outsideHoursFormatted || "0.00 hrs"}</strong>
+                      </span>
                     </div>
                   </div>
-                ) : (
-                  <div className="pt-2 border-t border-border text-center text-xs text-text-secondary py-2">
-                    No employee activity recorded in this date range.
+
+                  {/* Employee Hours Breakdown */}
+                  {generatedReport.employeeBreakdown && generatedReport.employeeBreakdown.length > 0 ? (
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        Employee Hours Breakdown
+                      </p>
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {generatedReport.employeeBreakdown.map((emp) => (
+                          <div
+                            key={emp.user.id}
+                            className="flex items-center justify-between text-xs py-2 px-3 rounded-lg bg-slate-50/70 border border-slate-200/80"
+                          >
+                            <div>
+                              <span className="font-semibold text-slate-900 block">{emp.user.name}</span>
+                              <span className="text-[10px] text-slate-500 font-mono">[{emp.user.employeeId}]</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-mono text-slate-900 font-bold block">{emp.totalHoursFormatted}</span>
+                              <span className="text-[10px] text-slate-500">
+                                <span className="text-emerald-700">Inside: {emp.regularHoursFormatted}</span> &nbsp;•&nbsp; 
+                                <span className="text-amber-700">Outside: {emp.outsideHoursFormatted}</span>
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-2 border-t border-slate-100 text-center text-xs text-slate-500 py-2">
+                      No employee activity recorded in this date range.
+                    </div>
+                  )}
+
+                  {/* Sample CTA Button */}
+                  <div className="pt-2 text-center">
+                    <div className="inline-flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-lg bg-blue-600 text-white font-semibold text-xs shadow-xs">
+                      View Timesheet & Reports &rarr;
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1.5 font-mono">
+                      Recipient email button preview
+                    </p>
                   </div>
-                )}
+
+                  {/* Footer Note */}
+                  <div className="pt-3 border-t border-slate-100 text-center text-[11px] text-slate-400">
+                    Sent automatically by {(user?.account?.name || "ClientHub Agency")} Secure Portal
+                  </div>
+                </div>
               </div>
             )}
           </div>

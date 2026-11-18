@@ -105,14 +105,25 @@ export async function sendCustomDateRangeReportEmail(options: {
   const totalSeconds = entries.reduce((acc: number, e: any) => acc + (e.durationSeconds || 0), 0);
   const totalHours = (totalSeconds / 3600).toFixed(2);
 
-  // Build simple HTML email
-  const subjectLine = `[EL App] Time Report — ${options.startDate} to ${options.endDate}`;
+  // Fetch agency branding for report email
+  const account = await prisma.account.findFirst({
+    select: { name: true, logoUrl: true },
+  });
+  const agencyName = account?.name || 'Acme Digital Agency Global';
+  const agencyLogoUrl = account?.logoUrl || null;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+  // Build clean branded HTML email matching ClientHub template
+  const subjectLine = `${agencyName}: Time Report — ${options.startDate} to ${options.endDate}`;
   const htmlBody = buildReportEmailHtml({
     startDate: options.startDate,
     endDate: options.endDate,
     entries,
     totalSeconds,
     totalHours,
+    agencyName,
+    agencyLogoUrl,
+    appUrl,
   });
 
   const transporter = createTransporter(cfg);
@@ -174,8 +185,18 @@ function buildReportEmailHtml(opts: {
   entries: any[];
   totalSeconds: number;
   totalHours: string;
+  agencyName?: string;
+  agencyLogoUrl?: string | null;
+  appUrl?: string;
 }): string {
   const { startDate, endDate, entries, totalHours } = opts;
+  const agencyName = opts.agencyName || 'Acme Digital Agency Global';
+  const agencyLogoUrl = opts.agencyLogoUrl || null;
+  const appUrl = opts.appUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+  const logoHtml = agencyLogoUrl
+    ? `<img src="${agencyLogoUrl}" alt="${agencyName}" style="max-height: 48px; max-width: 200px; object-fit: contain; margin-bottom: 8px;" />`
+    : `<div style="font-size: 20px; font-weight: 800; color: #1e3a8a; letter-spacing: -0.5px;">${agencyName}</div>`;
 
   let rowsHtml = '';
 
@@ -272,31 +293,74 @@ function buildReportEmailHtml(opts: {
   return `
     <!DOCTYPE html>
     <html>
-    <head><meta charset="utf-8" /></head>
-    <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f1f5f9;margin:0;padding:24px;color:#1e293b">
-      <div style="max-width:800px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
-        <div style="background:linear-gradient(135deg,#0f172a,#1e293b);padding:28px 32px;color:#fff">
-          <span style="display:inline-block;background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:3px 8px;border-radius:4px;text-transform:uppercase;margin-bottom:8px">EL App</span>
-          <h1 style="margin:0;font-size:22px;font-weight:700">Time Report</h1>
-          <p style="margin:6px 0 0;color:#94a3b8;font-size:14px">${startDate} to ${endDate}</p>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Time Report: ${startDate} to ${endDate}</title>
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+      <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        
+        <!-- Header with Agency Branding -->
+        <div style="padding: 24px 32px; border-bottom: 1px solid #f1f5f9; text-align: center; background-color: #ffffff;">
+          ${logoHtml}
+          <div style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">
+            ${agencyName} Secure Portal
+          </div>
         </div>
-        <div style="padding:24px 32px">
-          <p style="margin:0 0 16px;font-size:14px;color:#475569">Total tracked: <strong>${totalHours} hours</strong> across ${entries.length} entries.</p>
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            <thead>
-              <tr style="background:#f8fafc">
-                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600">Date</th>
-                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600">Employee</th>
-                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600">Project</th>
-                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600">Client</th>
-                <th style="padding:10px 12px;text-align:right;border-bottom:2px solid #e2e8f0;color:#64748b;font-weight:600">Duration</th>
-              </tr>
-            </thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
-        </div>
-        <div style="padding:16px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8">
-          Sent automatically by EL App • ${new Date().toLocaleString()}
+
+        <!-- Main Body -->
+        <div style="padding: 32px;">
+          <h2 style="font-size: 20px; font-weight: 700; color: #0f172a; margin: 0 0 18px 0; letter-spacing: -0.3px;">
+            Time Report: ${startDate} to ${endDate}
+          </h2>
+
+          <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 14px 0;">Hello Team,</p>
+          <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 16px 0;">
+            Here is the automated summary of tracked time entries for <strong>${agencyName}</strong>.
+          </p>
+
+          <!-- Key Details Summary Box -->
+          <div style="margin: 20px 0; padding: 16px 20px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <p style="font-size: 14px; line-height: 1.6; color: #334155; margin: 0 0 6px 0;">
+              <strong>Date Range:</strong> ${startDate} to ${endDate}
+            </p>
+            <p style="font-size: 14px; line-height: 1.6; color: #334155; margin: 0;">
+              <strong>Total Tracked:</strong> <span style="font-weight: 700; color: #0f172a;">${totalHours} hours</span> across ${entries.length} recorded entries
+            </p>
+          </div>
+
+          <!-- Time Entries Table -->
+          <div style="margin: 24px 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="background: #f8fafc;">
+                  <th style="padding: 10px 12px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Date</th>
+                  <th style="padding: 10px 12px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Employee</th>
+                  <th style="padding: 10px 12px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Project</th>
+                  <th style="padding: 10px 12px; text-align: left; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Client</th>
+                  <th style="padding: 10px 12px; text-align: right; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Duration</th>
+                </tr>
+              </thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>
+
+          <!-- Primary CTA Button -->
+          <div style="margin: 32px 0 20px 0; text-align: center;">
+            <a href="${appUrl}/time-sheet" style="background-color: #2563eb; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-block; box-shadow: 0 2px 4px rgba(37,99,235,0.2);">
+              View Timesheet & Reports &rarr;
+            </a>
+            <div style="margin-top: 10px; font-size: 12px; color: #64748b;">
+              Or copy and paste this link in your browser: <br/>
+              <a href="${appUrl}/time-sheet" style="color: #2563eb; word-break: break-all;">${appUrl}/time-sheet</a>
+            </div>
+          </div>
+
+          <!-- Footer Note -->
+          <div style="padding-top: 20px; border-top: 1px solid #f1f5f9; font-size: 12px; color: #64748b; line-height: 1.5; text-align: center;">
+            This is an automated report generated by ${agencyName} Secure Portal • ${new Date().toLocaleString()}
+          </div>
         </div>
       </div>
     </body>
