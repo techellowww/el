@@ -9,6 +9,14 @@ export interface AuthUser {
   accountId: string;
   email: string;
   name: string;
+  displayName?: string | null;
+  title?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  timezone?: string | null;
+  bio?: string | null;
+  department?: string | null;
+  employeeId?: string | null;
   role: 'ADMIN' | 'EMPLOYEE';
   account?: {
     id: string;
@@ -83,25 +91,71 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
   const userId = decoded?.id || decoded?.userId;
   if (!userId) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      accountId: true,
-      email: true,
-      name: true,
-      role: true,
-      isActive: true,
-      account: {
-        select: {
-          id: true,
-          name: true,
-          logoUrl: true,
-          currency: true,
+  let user: any = null;
+  try {
+    user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        accountId: true,
+        email: true,
+        name: true,
+        displayName: true,
+        title: true,
+        phone: true,
+        avatarUrl: true,
+        timezone: true,
+        bio: true,
+        department: true,
+        employeeId: true,
+        role: true,
+        isActive: true,
+        account: {
+          select: {
+            id: true,
+            name: true,
+            logoUrl: true,
+            currency: true,
+          },
         },
       },
-    },
-  });
+    });
+  } catch (err: any) {
+    if (err?.message?.includes('displayName') || err?.message?.includes('Unknown field') || err?.code === 'P2009') {
+      user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          accountId: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          account: {
+            select: {
+              id: true,
+              name: true,
+              logoUrl: true,
+              currency: true,
+            },
+          },
+        },
+      });
+      if (user) {
+        try {
+          const rows: any = await prisma.$queryRawUnsafe(
+            `SELECT "displayName", "title", "phone", "avatarUrl", "timezone", "bio", "department", "employeeId" FROM clienthub.ch_users WHERE id = $1`,
+            userId
+          );
+          if (rows && rows[0]) {
+            Object.assign(user, rows[0]);
+          }
+        } catch {}
+      }
+    } else {
+      throw err;
+    }
+  }
 
   if (!user || !user.isActive) return null;
 
@@ -110,6 +164,14 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
     accountId: user.accountId,
     email: user.email,
     name: user.name,
+    displayName: user.displayName,
+    title: user.title,
+    phone: user.phone,
+    avatarUrl: user.avatarUrl,
+    timezone: user.timezone,
+    bio: user.bio,
+    department: user.department,
+    employeeId: user.employeeId,
     role: user.role as 'ADMIN' | 'EMPLOYEE',
     account: user.account
       ? {

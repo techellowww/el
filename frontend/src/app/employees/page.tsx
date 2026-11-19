@@ -26,6 +26,14 @@ import {
 interface Employee {
   id: string;
   name: string;
+  displayName?: string | null;
+  title?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  timezone?: string | null;
+  bio?: string | null;
+  department?: string | null;
+  employeeId?: string | null;
   email: string;
   role: "ADMIN" | "EMPLOYEE";
   isActive: boolean;
@@ -401,18 +409,27 @@ export default function EmployeesPage() {
                   {/* Top: Avatar, Name, Role */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2.5 sm:gap-3">
-                      <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-primary-subtle text-primary border border-blue-200 flex items-center justify-center font-bold text-xs sm:text-sm shrink-0">
-                        {initials}
+                      <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl overflow-hidden bg-primary-subtle text-primary border border-blue-200 flex items-center justify-center font-bold text-xs sm:text-sm shrink-0">
+                        {emp.avatarUrl ? (
+                          <img src={emp.avatarUrl} alt={emp.displayName || emp.name} className="w-full h-full object-cover" />
+                        ) : (
+                          initials
+                        )}
                       </div>
                       <div>
                         <h3 className="card-title text-text-primary flex items-center gap-1.5">
-                          <span>{emp.name}</span>
+                          <span>{emp.displayName || emp.name}</span>
                           {emp.id === user?.id && (
                             <span className="text-[9px] sm:text-[10px] bg-slate-100 text-text-secondary px-1.5 py-0.5 rounded border border-border">
                               You
                             </span>
                           )}
                         </h3>
+                        {emp.title && (
+                          <p className="text-[11px] text-slate-500 font-medium truncate max-w-[180px]">
+                            {emp.title}
+                          </p>
+                        )}
                         <p className="helper-text text-text-secondary flex items-center gap-1 mt-0.5">
                           <Mail className="w-3 h-3 text-slate-400" />
                           <span className="truncate max-w-[150px] sm:max-w-[180px]">{emp.email}</span>

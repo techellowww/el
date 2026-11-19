@@ -11,8 +11,14 @@ export interface UserSession {
   id: string;
   email: string;
   name: string;
+  displayName?: string | null;
+  title?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  timezone?: string | null;
+  bio?: string | null;
   role: 'ADMIN' | 'EMPLOYEE';
-  employeeId: string;
+  employeeId?: string | null;
   department?: string | null;
   account?: AgencyBranding & { id: string };
 }
@@ -51,6 +57,7 @@ interface AuthState {
   agencyBranding: AgencyBranding;
   isLoading: boolean;
   setUser: (user: UserSession | null, token?: string | null) => void;
+  updateUser: (updates: Partial<UserSession>) => void;
   setAgencyBranding: (branding: Partial<AgencyBranding>) => void;
   fetchUser: () => Promise<UserSession | null>;
   fetchBranding: () => Promise<AgencyBranding | null>;
@@ -81,6 +88,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       ...(branding ? { agencyBranding: branding } : {}),
     }));
   },
+  updateUser: (updates) =>
+    set((state) => ({
+      user: state.user ? { ...state.user, ...updates } : null,
+    })),
   setAgencyBranding: (branding) =>
     set((state) => ({ agencyBranding: { ...state.agencyBranding, ...branding } })),
   fetchBranding: async () => {

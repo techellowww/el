@@ -1120,7 +1120,11 @@ export default function ScreenshotModulePage() {
               value={filterStartDate}
               max={filterEndDate || undefined}
               onChange={(e) => handleStartDateChange(e.target.value)}
-              onClick={(e) => e.currentTarget.showPicker?.()}
+              onClick={(e) => {
+                try {
+                  e.currentTarget.showPicker();
+                } catch {}
+              }}
               className="w-full h-9 bg-white border border-border rounded-lg px-2.5 text-xs text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer"
             />
           </div>
@@ -1137,7 +1141,11 @@ export default function ScreenshotModulePage() {
               value={filterEndDate}
               min={filterStartDate || undefined}
               onChange={(e) => handleEndDateChange(e.target.value)}
-              onClick={(e) => e.currentTarget.showPicker?.()}
+              onClick={(e) => {
+                try {
+                  e.currentTarget.showPicker();
+                } catch {}
+              }}
               className="w-full h-9 bg-white border border-border rounded-lg px-2.5 text-xs text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer"
             />
           </div>

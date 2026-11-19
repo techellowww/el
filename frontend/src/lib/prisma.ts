@@ -38,13 +38,19 @@ const globalForPrisma = globalThis as unknown as {
   prisma: any | undefined;
 };
 
+const SCHEMA_VERSION = '2026-11-19-profile-v1';
+
 export const prisma =
-  (globalForPrisma.prisma && globalForPrisma.prisma.officeSchedule)
+  (globalForPrisma.prisma && globalForPrisma.prisma._schemaVersion === SCHEMA_VERSION)
     ? globalForPrisma.prisma
-    : new PrismaClient({
-        datasources: dbUrl ? { db: { url: dbUrl } } : undefined,
-        log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
-      });
+    : (() => {
+        const client = new PrismaClient({
+          datasources: dbUrl ? { db: { url: dbUrl } } : undefined,
+          log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+        });
+        client._schemaVersion = SCHEMA_VERSION;
+        return client;
+      })();
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;

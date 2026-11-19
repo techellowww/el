@@ -615,7 +615,12 @@ export default function TimeSheetPage() {
                 type="date"
                 value={startDate}
                 onChange={handleStartDateChange}
-                className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-2xs"
+                onClick={(e) => {
+                  try {
+                    e.currentTarget.showPicker();
+                  } catch {}
+                }}
+                className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-2xs cursor-pointer"
               />
             </div>
           </div>
@@ -630,7 +635,12 @@ export default function TimeSheetPage() {
                 type="date"
                 value={endDate}
                 onChange={handleEndDateChange}
-                className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-2xs"
+                onClick={(e) => {
+                  try {
+                    e.currentTarget.showPicker();
+                  } catch {}
+                }}
+                className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs sm:text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-2xs cursor-pointer"
               />
             </div>
           </div>

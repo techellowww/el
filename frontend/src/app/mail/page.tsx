@@ -823,7 +823,7 @@ export default function MailModulePage() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  <label htmlFor="manual-report-from-date" className="block text-xs font-medium text-text-secondary mb-1.5 cursor-pointer">
                     From Date
                   </label>
                   <input
@@ -835,11 +835,16 @@ export default function MailModulePage() {
                       setManualFromDate(e.target.value);
                       setDateValidationError(null);
                     }}
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker();
+                      } catch {}
+                    }}
                     className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-primary shadow-xs cursor-pointer"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  <label htmlFor="manual-report-to-date" className="block text-xs font-medium text-text-secondary mb-1.5 cursor-pointer">
                     To Date
                   </label>
                   <input
@@ -850,6 +855,11 @@ export default function MailModulePage() {
                     onChange={(e) => {
                       setManualToDate(e.target.value);
                       setDateValidationError(null);
+                    }}
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker();
+                      } catch {}
                     }}
                     className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-primary shadow-xs cursor-pointer"
                   />

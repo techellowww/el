@@ -24,8 +24,10 @@ import {
 interface ChatUser {
   id: string;
   name: string;
+  displayName?: string | null;
   role: string;
   employeeId: string;
+  avatarUrl?: string | null;
 }
 
 interface MessageItem {
@@ -846,7 +848,7 @@ export function ChatDrawer() {
                 const isEditing = editingMessageId === msg.id;
                 const senderName = isClient
                   ? (msg.clientSenderName || msg.sender?.name || 'Client')
-                  : (msg.sender?.name || 'Team Member');
+                  : (msg.sender?.displayName || msg.sender?.name || 'Team Member');
                 const senderRole = isClient ? 'CLIENT' : (msg.sender?.role || 'STAFF');
 
                 return (

@@ -13,48 +13,127 @@ export async function GET(request?: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [users, clients, timeAggregates] = await Promise.all([
-    prisma.user.findMany({
-      where: { accountId: session.accountId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        assignedClients: {
-          include: {
-            client: { select: { id: true, name: true, company: true } },
+  let users: any[] = [];
+  let clients: any[] = [];
+  let timeAggregates: any[] = [];
+
+  try {
+    const res = await Promise.all([
+      prisma.user.findMany({
+        where: { accountId: session.accountId },
+        select: {
+          id: true,
+          name: true,
+          displayName: true,
+          title: true,
+          phone: true,
+          avatarUrl: true,
+          timezone: true,
+          bio: true,
+          department: true,
+          employeeId: true,
+          email: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+          assignedClients: {
+            include: {
+              client: { select: { id: true, name: true, company: true } },
+            },
+          },
+          timeEntries: {
+            where: { isRunning: true },
+            select: {
+              id: true,
+              startedAt: true,
+              description: true,
+              project: { select: { id: true, name: true } },
+            },
+            take: 1,
           },
         },
-        timeEntries: {
-          where: { isRunning: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.client.findMany({
+        where: {
+          accountId: session.accountId,
+          NOT: { company: "__INTERNAL_GENERAL_TEAM__" },
+        },
+        select: { id: true, name: true, company: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.timeEntry.groupBy({
+        by: ["userId"],
+        where: { accountId: session.accountId, isRunning: false },
+        _sum: { durationSeconds: true },
+      }),
+    ]);
+    users = res[0];
+    clients = res[1];
+    timeAggregates = res[2];
+  } catch (err: any) {
+    if (err?.message?.includes('displayName') || err?.message?.includes('Unknown field') || err?.code === 'P2009') {
+      const res = await Promise.all([
+        prisma.user.findMany({
+          where: { accountId: session.accountId },
           select: {
             id: true,
-            startedAt: true,
-            description: true,
-            project: { select: { id: true, name: true } },
+            name: true,
+            email: true,
+            role: true,
+            isActive: true,
+            createdAt: true,
+            assignedClients: {
+              include: {
+                client: { select: { id: true, name: true, company: true } },
+              },
+            },
+            timeEntries: {
+              where: { isRunning: true },
+              select: {
+                id: true,
+                startedAt: true,
+                description: true,
+                project: { select: { id: true, name: true } },
+              },
+              take: 1,
+            },
           },
-          take: 1,
-        },
-      },
-      orderBy: { createdAt: "asc" },
-    }),
-    prisma.client.findMany({
-      where: {
-        accountId: session.accountId,
-        NOT: { company: "__INTERNAL_GENERAL_TEAM__" },
-      },
-      select: { id: true, name: true, company: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.timeEntry.groupBy({
-      by: ["userId"],
-      where: { accountId: session.accountId, isRunning: false },
-      _sum: { durationSeconds: true },
-    }),
-  ]);
+          orderBy: { createdAt: "asc" },
+        }),
+        prisma.client.findMany({
+          where: {
+            accountId: session.accountId,
+            NOT: { company: "__INTERNAL_GENERAL_TEAM__" },
+          },
+          select: { id: true, name: true, company: true },
+          orderBy: { name: "asc" },
+        }),
+        prisma.timeEntry.groupBy({
+          by: ["userId"],
+          where: { accountId: session.accountId, isRunning: false },
+          _sum: { durationSeconds: true },
+        }),
+      ]);
+      users = res[0];
+      clients = res[1];
+      timeAggregates = res[2];
+
+      try {
+        const rawUsers: any = await prisma.$queryRawUnsafe(
+          `SELECT id, "displayName", "title", "phone", "avatarUrl", "timezone", "bio", "department", "employeeId" FROM clienthub.ch_users WHERE "accountId" = $1`,
+          session.accountId
+        );
+        const rawMap = new Map((rawUsers || []).map((r: any) => [r.id, r]));
+        for (const u of users) {
+          const raw = rawMap.get(u.id);
+          if (raw) Object.assign(u, raw);
+        }
+      } catch {}
+    } else {
+      throw err;
+    }
+  }
 
   const userTimeMap = new Map<string, number>();
   for (const agg of timeAggregates) {
@@ -64,6 +143,14 @@ export async function GET(request?: Request) {
   const employees = users.map((u: any) => ({
     id: u.id,
     name: u.name,
+    displayName: u.displayName,
+    title: u.title,
+    phone: u.phone,
+    avatarUrl: u.avatarUrl,
+    timezone: u.timezone,
+    bio: u.bio,
+    department: u.department,
+    employeeId: u.employeeId,
     email: u.email,
     role: u.role,
     isActive: u.isActive,

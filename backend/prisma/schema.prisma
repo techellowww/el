@@ -45,6 +45,14 @@ model User {
   email             String
   passwordHash      String
   name              String
+  displayName       String?
+  title             String?
+  phone             String?
+  avatarUrl         String?
+  timezone          String?            @default("Asia/Kolkata")
+  bio               String?
+  department        String?
+  employeeId        String?
   role              String             @default("EMPLOYEE") // "ADMIN" | "EMPLOYEE"
   isActive          Boolean            @default(true)
   createdAt         DateTime           @default(now())

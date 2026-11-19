@@ -60,12 +60,33 @@ export async function POST(request: Request) {
       );
     }
 
+    // Ensure profile fields are present even if cached schema differs
+    if (user.displayName === undefined) {
+      try {
+        const rows: any = await prisma.$queryRawUnsafe(
+          `SELECT "displayName", "title", "phone", "avatarUrl", "timezone", "bio", "department", "employeeId" FROM clienthub.ch_users WHERE id = $1`,
+          user.id
+        );
+        if (rows && rows[0]) {
+          Object.assign(user, rows[0]);
+        }
+      } catch {}
+    }
+
     const payload = {
       id: user.id,
       userId: user.id,
       accountId: user.accountId,
       email: user.email,
       name: user.name,
+      displayName: user.displayName,
+      title: user.title,
+      phone: user.phone,
+      avatarUrl: user.avatarUrl,
+      timezone: user.timezone,
+      bio: user.bio,
+      department: user.department,
+      employeeId: user.employeeId,
       role: user.role as 'ADMIN' | 'EMPLOYEE',
       account: user.account
         ? {

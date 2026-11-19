@@ -497,8 +497,13 @@ export default function CalendarPage() {
                       setStartDate(e.target.value);
                       if (!endDate) setEndDate(e.target.value);
                     }}
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker();
+                      } catch {}
+                    }}
                     required
-                    className="w-full px-3 py-2 rounded-xl border border-border text-xs text-text-primary mb-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="w-full px-3 py-2 rounded-xl border border-border text-xs text-text-primary mb-2 focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
                   />
                   <div className="flex items-center">
                     <TimePicker12h
@@ -515,8 +520,13 @@ export default function CalendarPage() {
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        e.currentTarget.showPicker();
+                      } catch {}
+                    }}
                     required
-                    className="w-full px-3 py-2 rounded-xl border border-border text-xs text-text-primary mb-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="w-full px-3 py-2 rounded-xl border border-border text-xs text-text-primary mb-2 focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
                   />
                   <div className="flex items-center">
                     <TimePicker12h

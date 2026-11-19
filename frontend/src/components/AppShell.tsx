@@ -16,6 +16,7 @@ import {
   onScreenStreamChange,
 } from '@/lib/screenshotCapture';
 import { ChatDrawer, FloatingChatButton } from '@/components/ChatDrawer';
+import { EditProfileModal } from '@/components/EditProfileModal';
 import {
   Clock,
   LayoutDashboard,
@@ -46,6 +47,8 @@ import {
   MessageSquare,
   CreditCard,
   Settings,
+  Pencil,
+  User,
 } from 'lucide-react';
 
 
@@ -88,6 +91,9 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentDateStr, setCurrentDateStr] = useState('');
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const lastCapturedIndexRef = useRef<number>(-1);
   // Track previous active timer ID to detect a new timer start
   const prevTimerIdRef = useRef<string | null>(null);
@@ -129,6 +135,30 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       window.removeEventListener('visibilitychange', syncStreamState);
     };
   }, [activeTimer]);
+
+  // Global enhancement: clicking anywhere on any date input opens the native calendar picker
+  useEffect(() => {
+    const handleGlobalDateInputClick = (e: MouseEvent) => {
+      const target = e.target;
+      if (
+        target instanceof HTMLInputElement &&
+        (target.type === 'date' || target.type === 'datetime-local') &&
+        !target.disabled &&
+        !target.readOnly
+      ) {
+        try {
+          target.showPicker();
+        } catch {
+          // Ignore if already open or unsupported
+        }
+      }
+    };
+
+    document.addEventListener('click', handleGlobalDateInputClick);
+    return () => {
+      document.removeEventListener('click', handleGlobalDateInputClick);
+    };
+  }, []);
 
   // Auto-prompt for screen share when screenshot capture is enabled and a new timer session starts
   useEffect(() => {
@@ -788,32 +818,109 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          <div className="flex items-center justify-between p-2 rounded-xl bg-navy-surface border border-slate-700/80 mb-2">
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="w-8 h-8 rounded-lg bg-primary text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-sm">
-                {getInitials(user?.name)}
-              </div>
-              <div className="overflow-hidden">
-                <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-mono text-slate-400">{user?.employeeId}</span>
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-blue-300 bg-primary/20 px-1 rounded">
-                    {user?.role}
-                  </span>
+          {/* User Profile Card (Slack Style) */}
+          <div className="relative mb-2">
+            <button
+              type="button"
+              id="sidebar-profile-card-btn"
+              data-testid="sidebar-profile-card-btn"
+              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+              className="w-full flex items-center justify-between p-2 rounded-xl bg-navy-surface border border-slate-700/80 hover:border-slate-500 hover:bg-slate-800/80 transition text-left cursor-pointer group"
+              title="Click to view & edit profile"
+            >
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-sm border border-slate-700">
+                  {user?.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={user.displayName || user.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{getInitials(user?.displayName || user?.name)}</span>
+                  )}
+                </div>
+                <div className="overflow-hidden">
+                  <p className="text-xs font-semibold text-white truncate group-hover:text-blue-300 transition">
+                    {user?.displayName || user?.name}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    {user?.title ? (
+                      <span className="text-[10px] text-slate-400 truncate max-w-[95px]">{user.title}</span>
+                    ) : (
+                      <span className="text-[10px] font-mono text-slate-400">{user?.employeeId || user?.role}</span>
+                    )}
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-blue-300 bg-primary/20 px-1 rounded">
+                      {user?.role}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+              <div className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 group-hover:text-white group-hover:bg-slate-700/70 transition shrink-0">
+                <Pencil className="w-3 h-3" />
+              </div>
+            </button>
 
-          <button
-            id="nav-sign-out"
-            data-testid="nav-sign-out"
-            onClick={() => logout()}
-            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-navy-surface transition cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
-          </button>
+            {/* Slack-style profile popover */}
+            {isProfileMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsProfileMenuOpen(false)}
+                />
+                <div className="absolute bottom-full left-0 right-0 mb-2 z-50 bg-navy-surface border border-slate-700 rounded-2xl shadow-2xl overflow-hidden p-3 space-y-3 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="flex items-start gap-3 pb-2.5 border-b border-slate-700/80">
+                    <div className="w-11 h-11 rounded-xl overflow-hidden bg-primary text-white font-bold flex items-center justify-center text-sm shrink-0 border border-slate-600 shadow-sm">
+                      {user?.avatarUrl ? (
+                        <img src={user.avatarUrl} alt={user.displayName || user.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{getInitials(user?.displayName || user?.name)}</span>
+                      )}
+                    </div>
+                    <div className="overflow-hidden min-w-0">
+                      <p className="text-xs font-bold text-white truncate">{user?.name}</p>
+                      {user?.displayName && (
+                        <p className="text-[11px] text-blue-300 truncate font-medium">@{user.displayName}</p>
+                      )}
+                      {user?.title && (
+                        <p className="text-[10px] text-slate-400 truncate mt-0.5">{user.title}</p>
+                      )}
+                      <p className="text-[10px] text-slate-500 font-mono truncate">{user?.email}</p>
+                    </div>
+                  </div>
+
+                  {user?.bio && (
+                    <p className="text-[11px] text-slate-300 italic bg-navy/60 p-2 rounded-lg border border-slate-800">
+                      &quot;{user.bio}&quot;
+                    </p>
+                  )}
+
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      id="popover-edit-profile-btn"
+                      data-testid="popover-edit-profile-btn"
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        setIsEditProfileOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-white bg-primary hover:bg-primary-hover transition cursor-pointer shadow-xs"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span>Edit Profile</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="popover-sign-out-btn"
+                      data-testid="popover-sign-out-btn"
+                      onClick={() => logout()}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -844,15 +951,90 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
               </div>
             )}
 
-            {/* User pill */}
-            <div className="flex items-center gap-2 pl-2 border-l border-border">
-              <div className="w-8 h-8 rounded-lg bg-primary-subtle text-primary border border-blue-200 flex items-center justify-center text-xs font-bold">
-                {getInitials(user?.name)}
-              </div>
-              <div className="hidden lg:block text-left">
-                <p className="text-xs font-semibold text-text-primary leading-tight truncate max-w-[120px]">{user?.name}</p>
-                <p className="text-[10px] text-text-secondary font-mono leading-tight">{user?.employeeId} • {user?.role}</p>
-              </div>
+            {/* User pill (Slack Style) */}
+            <div className="relative">
+              <button
+                type="button"
+                id="header-user-menu-btn"
+                data-testid="header-user-menu-btn"
+                onClick={() => setIsHeaderMenuOpen(!isHeaderMenuOpen)}
+                className="flex items-center gap-2 pl-2 border-l border-border hover:opacity-85 transition cursor-pointer group"
+                title="Account & Profile options"
+              >
+                <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary-subtle text-primary border border-blue-200 flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs">
+                  {user?.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={user.displayName || user.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{getInitials(user?.displayName || user?.name)}</span>
+                  )}
+                </div>
+                <div className="hidden lg:block text-left">
+                  <p className="text-xs font-semibold text-text-primary leading-tight truncate max-w-[120px] group-hover:text-primary transition">
+                    {user?.displayName || user?.name}
+                  </p>
+                  <p className="text-[10px] text-text-secondary font-mono leading-tight">
+                    {user?.title || `${user?.employeeId || ''} • ${user?.role}`}
+                  </p>
+                </div>
+              </button>
+
+              {/* Desktop Header User Dropdown */}
+              {isHeaderMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsHeaderMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-64 z-50 bg-white border border-border rounded-2xl shadow-xl p-3 space-y-2.5 animate-in fade-in zoom-in-95 duration-100">
+                    <div className="flex items-center gap-2.5 pb-2.5 border-b border-border">
+                      <div className="w-10 h-10 rounded-xl overflow-hidden bg-primary text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-2xs">
+                        {user?.avatarUrl ? (
+                          <img src={user.avatarUrl} alt={user.displayName || user.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span>{getInitials(user?.displayName || user?.name)}</span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-text-primary truncate">{user?.name}</p>
+                        {user?.displayName && (
+                          <p className="text-[11px] text-primary truncate font-medium">@{user.displayName}</p>
+                        )}
+                        <p className="text-[10px] text-text-secondary truncate font-mono">{user?.email}</p>
+                      </div>
+                    </div>
+
+                    {user?.title && (
+                      <p className="text-[11px] text-text-secondary px-1 truncate">
+                        {user.title}
+                      </p>
+                    )}
+
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        id="header-edit-profile-btn"
+                        data-testid="header-edit-profile-btn"
+                        onClick={() => {
+                          setIsHeaderMenuOpen(false);
+                          setIsEditProfileOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-text-primary hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-primary" />
+                        <span>Edit Profile</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        id="header-sign-out-btn"
+                        data-testid="header-sign-out-btn"
+                        onClick={() => logout()}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-red-600 hover:bg-red-50 transition cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </header>
@@ -891,9 +1073,18 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* User Avatar badge for tablet */}
             <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-border">
-              <div className="w-7 h-7 rounded-lg bg-primary-subtle text-primary border border-blue-200 flex items-center justify-center text-xs font-bold">
-                {getInitials(user?.name)}
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditProfileOpen(true)}
+                className="w-7 h-7 rounded-lg overflow-hidden bg-primary-subtle text-primary border border-blue-200 flex items-center justify-center text-xs font-bold hover:opacity-80 transition cursor-pointer"
+                title="Edit profile"
+              >
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.displayName || user.name} className="w-full h-full object-cover" />
+                ) : (
+                  getInitials(user?.displayName || user?.name)
+                )}
+              </button>
             </div>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -941,20 +1132,34 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                 </button>
               </div>
 
-              {/* Mobile User Card */}
-              <div className="p-3 bg-navy-surface border-b border-slate-800">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-primary/20 text-blue-300 font-bold flex items-center justify-center text-xs border border-primary/30">
-                    {getInitials(user?.name)}
+              {/* Mobile User Card (Slack Style) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setIsEditProfileOpen(true);
+                }}
+                className="w-full p-3 bg-navy-surface border-b border-slate-800 flex items-center justify-between text-left hover:bg-slate-800/80 transition cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary/20 text-blue-300 font-bold flex items-center justify-center text-xs border border-primary/30 shrink-0">
+                    {user?.avatarUrl ? (
+                      <img src={user.avatarUrl} alt={user.displayName || user.name} className="w-full h-full object-cover" />
+                    ) : (
+                      getInitials(user?.displayName || user?.name)
+                    )}
                   </div>
                   <div className="overflow-hidden">
-                    <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
+                    <p className="text-xs font-semibold text-white truncate group-hover:text-blue-300 transition">
+                      {user?.displayName || user?.name}
+                    </p>
                     <p className="text-[10px] text-slate-400 font-mono">
-                      {user?.employeeId} • {user?.role}
+                      {user?.title || `${user?.employeeId || ''} • ${user?.role}`}
                     </p>
                   </div>
                 </div>
-              </div>
+                <Pencil className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition shrink-0" />
+              </button>
 
               {/* Mobile Active Timer Card */}
               {activeTimer && (
@@ -1020,13 +1225,26 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                 ))}
               </nav>
 
-              {/* Sign Out */}
-              <div className="p-3 border-t border-slate-800 shrink-0">
+              {/* Sign Out & Profile */}
+              <div className="p-3 border-t border-slate-800 shrink-0 space-y-1.5">
+                <button
+                  type="button"
+                  id="mobile-nav-edit-profile"
+                  data-testid="mobile-nav-edit-profile"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setIsEditProfileOpen(true);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-white bg-primary hover:bg-primary-hover transition cursor-pointer"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit Profile
+                </button>
                 <button
                   id="mobile-nav-sign-out"
                   data-testid="mobile-nav-sign-out"
                   onClick={() => logout()}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-navy-surface transition"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-navy-surface transition cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
                   Sign Out
@@ -1204,6 +1422,12 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       )}
+
+      {/* Slack-style Edit Profile Modal */}
+      <EditProfileModal
+        isOpen={isEditProfileOpen}
+        onClose={() => setIsEditProfileOpen(false)}
+      />
     </div>
   );
 }
