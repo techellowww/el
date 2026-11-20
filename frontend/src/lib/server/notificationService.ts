@@ -299,3 +299,46 @@ export async function getFailedNotificationAlerts(accountId: string) {
   });
 }
 
+/**
+ * Re-queues failed notifications for retry delivery
+ */
+export async function retryFailedNotifications(accountId: string) {
+  const result = await prisma.notification.updateMany({
+    where: {
+      accountId,
+      status: "FAILED",
+    },
+    data: {
+      status: "QUEUED",
+      retryCount: 0,
+      errorLog: null,
+      scheduledFor: new Date(),
+    },
+  });
+
+  try {
+    await processNotificationQueue();
+  } catch (err: any) {
+    console.warn("[retryFailedNotifications immediate dispatch warn]:", err?.message);
+  }
+
+  return { retriedCount: result.count };
+}
+
+/**
+ * Dismisses failed notifications so they no longer trigger the dashboard alert
+ */
+export async function dismissFailedNotifications(accountId: string) {
+  const result = await prisma.notification.updateMany({
+    where: {
+      accountId,
+      status: "FAILED",
+    },
+    data: {
+      status: "DISMISSED",
+    },
+  });
+
+  return { dismissedCount: result.count };
+}
+

@@ -23,6 +23,7 @@ import {
   Loader2,
   X,
   Moon,
+  RefreshCw,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -35,6 +36,8 @@ export default function DashboardPage() {
   const [unpaidInvoices, setUnpaidInvoices] = useState<any[]>([]);
   const [pendingProposals, setPendingProposals] = useState<any[]>([]);
   const [failedAlerts, setFailedAlerts] = useState<any[]>([]);
+  const [isRetryingAlerts, setIsRetryingAlerts] = useState<boolean>(false);
+  const [isDismissingAlerts, setIsDismissingAlerts] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
 
   // Quick timer start states
@@ -97,6 +100,43 @@ export default function DashboardPage() {
 
     loadDashboard();
   }, [activeTimer]);
+
+  const handleRetryAlerts = async () => {
+    setIsRetryingAlerts(true);
+    try {
+      const res = await fetch("/api/notifications/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "retry" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFailedAlerts(data.alerts || []);
+      }
+    } catch (err) {
+      console.error("Failed to retry alerts:", err);
+    } finally {
+      setIsRetryingAlerts(false);
+    }
+  };
+
+  const handleDismissAlerts = async () => {
+    setIsDismissingAlerts(true);
+    try {
+      const res = await fetch("/api/notifications/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss" }),
+      });
+      if (res.ok) {
+        setFailedAlerts([]);
+      }
+    } catch (err) {
+      console.error("Failed to dismiss alerts:", err);
+    } finally {
+      setIsDismissingAlerts(false);
+    }
+  };
 
   const handleStartQuickTimer = async (e?: React.FormEvent, forceOvertime?: boolean) => {
     if (typeof window !== 'undefined' && !isScreenStreamActive()) {
@@ -386,22 +426,48 @@ export default function DashboardPage() {
 
       {/* Failed Email Alerts Banner (Section 8: "If one fails, retry up to 3 times, then mark it failed and show it on Home") */}
       {failedAlerts.length > 0 && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-center justify-between gap-3 animate-in fade-in shadow-xs">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in shadow-xs">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold">Email Delivery Alert:</span> {failedAlerts.length} notification{failedAlerts.length === 1 ? "" : "s"} failed after 3 automatic retries.
-              <span className="text-red-700 block mt-0.5 font-mono text-[11px]">
+              <div className="font-bold flex items-center gap-2 flex-wrap">
+                <span>Email Delivery Alert:</span>
+                <span className="font-normal">
+                  {failedAlerts.length} notification{failedAlerts.length === 1 ? "" : "s"} failed after 3 automatic retries.
+                </span>
+              </div>
+              <span className="text-red-700 block mt-0.5 font-mono text-[11px] break-all">
                 Latest error: {failedAlerts[0]?.errorLog || "SMTP connection/delivery failure"}
               </span>
             </div>
           </div>
-          <Link
-            href="/mail"
-            className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-xs whitespace-nowrap"
-          >
-            Check Mail Settings &rarr;
-          </Link>
+          <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+            <button
+              type="button"
+              onClick={handleRetryAlerts}
+              disabled={isRetryingAlerts || isDismissingAlerts}
+              className="px-3 py-1.5 rounded-lg bg-white border border-red-300 hover:bg-red-50 text-red-800 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50 shadow-2xs"
+              title="Re-queue failed notifications and retry sending"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRetryingAlerts ? "animate-spin text-red-600" : ""}`} />
+              <span>{isRetryingAlerts ? "Retrying..." : "Retry All"}</span>
+            </button>
+            <Link
+              href="/mail"
+              className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-xs whitespace-nowrap transition shadow-2xs"
+            >
+              Check Mail Settings &rarr;
+            </Link>
+            <button
+              type="button"
+              onClick={handleDismissAlerts}
+              disabled={isRetryingAlerts || isDismissingAlerts}
+              className="p-1.5 rounded-lg hover:bg-red-100 text-red-600 transition cursor-pointer disabled:opacity-50"
+              title="Dismiss alert banner"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 

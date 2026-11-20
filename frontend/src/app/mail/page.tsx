@@ -122,6 +122,11 @@ export default function MailModulePage() {
   const [isSendingNow, setIsSendingNow] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Active delivery failures from transactional notifications
+  const [failedAlerts, setFailedAlerts] = useState<any[]>([]);
+  const [isRetryingAlerts, setIsRetryingAlerts] = useState<boolean>(false);
+  const [isDismissingAlerts, setIsDismissingAlerts] = useState<boolean>(false);
+
   useEffect(() => {
     loadAll();
   }, []);
@@ -135,8 +140,66 @@ export default function MailModulePage() {
 
   const loadAll = async () => {
     setIsLoading(true);
-    await Promise.all([loadSettings(), loadAuditLogs()]);
+    await Promise.all([loadSettings(), loadAuditLogs(), loadFailedAlerts()]);
     setIsLoading(false);
+  };
+
+  const loadFailedAlerts = async () => {
+    try {
+      const res = await fetch('/api/notifications/alerts');
+      if (res.ok) {
+        const data = await res.json();
+        setFailedAlerts(data.alerts || []);
+      }
+    } catch (err) {
+      console.error('Failed to load failed alerts:', err);
+    }
+  };
+
+  const handleRetryAlerts = async () => {
+    setIsRetryingAlerts(true);
+    try {
+      const res = await fetch('/api/notifications/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'retry' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFailedAlerts(data.alerts || []);
+        setMessage({
+          type: 'success',
+          text: `Retried ${data.retriedCount || 0} failed notification(s). Remaining failed: ${(data.alerts || []).length}.`,
+        });
+        loadAuditLogs();
+      }
+    } catch (err) {
+      console.error('Failed to retry alerts:', err);
+    } finally {
+      setIsRetryingAlerts(false);
+    }
+  };
+
+  const handleDismissAlerts = async () => {
+    setIsDismissingAlerts(true);
+    try {
+      const res = await fetch('/api/notifications/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'dismiss' }),
+      });
+      if (res.ok) {
+        setFailedAlerts([]);
+        setMessage({
+          type: 'success',
+          text: 'Failed notification delivery alerts have been dismissed.',
+        });
+      }
+    } catch (err) {
+      console.error('Failed to dismiss alerts:', err);
+    } finally {
+      setIsDismissingAlerts(false);
+    }
   };
 
   const loadSettings = async () => {
@@ -489,6 +552,46 @@ export default function MailModulePage() {
           </button>
         </div>
       </div>
+
+      {/* Active Failed Notifications Alert Banner */}
+      {failedAlerts.length > 0 && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in shadow-xs">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold flex items-center gap-2 flex-wrap">
+                <span>Email Delivery Alert:</span>
+                <span className="font-normal">
+                  {failedAlerts.length} notification{failedAlerts.length === 1 ? '' : 's'} failed after 3 automatic retries.
+                </span>
+              </div>
+              <span className="text-red-700 block mt-0.5 font-mono text-[11px] break-all">
+                Latest error: {failedAlerts[0]?.errorLog || 'SMTP connection/delivery failure'}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+            <button
+              type="button"
+              onClick={handleRetryAlerts}
+              disabled={isRetryingAlerts || isDismissingAlerts}
+              className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50 shadow-2xs"
+              title="Re-queue and retry failed notifications"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRetryingAlerts ? 'animate-spin' : ''}`} />
+              <span>{isRetryingAlerts ? 'Retrying...' : 'Retry Deliveries'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDismissAlerts}
+              disabled={isRetryingAlerts || isDismissingAlerts}
+              className="px-3 py-1.5 rounded-lg bg-white border border-red-300 hover:bg-red-50 text-red-800 font-semibold text-xs transition cursor-pointer disabled:opacity-50 shadow-2xs"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Global Feedback Banner */}
       {message && (
@@ -1062,6 +1165,43 @@ export default function MailModulePage() {
 
             {showSmtpConfig && (
               <div className="mt-4 pt-4 border-t border-border space-y-4 animate-in fade-in duration-200">
+                {/* Provider Quick Presets */}
+                {isAdmin && (
+                  <div className="flex flex-wrap items-center gap-2 pb-1">
+                    <span className="text-[11px] font-semibold text-text-secondary">Quick Presets:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSmtpHost('smtp.gmail.com');
+                        setSmtpPort(587);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-text-primary text-[11px] font-medium border border-border transition cursor-pointer"
+                    >
+                      Gmail (587)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSmtpHost('smtp.zoho.com');
+                        setSmtpPort(465);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-text-primary text-[11px] font-medium border border-border transition cursor-pointer"
+                    >
+                      Zoho Mail (.com 465)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSmtpHost('smtp.zoho.in');
+                        setSmtpPort(465);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-text-primary text-[11px] font-medium border border-border transition cursor-pointer"
+                    >
+                      Zoho Mail (.in 465)
+                    </button>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-text-secondary mb-1">SMTP Host</label>
@@ -1119,25 +1259,42 @@ export default function MailModulePage() {
                   />
                 </div>
 
-                {/* Google 16-character App Password note */}
-                <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-900 space-y-1">
+                {/* Google & Zoho App Password note */}
+                <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-900 space-y-2">
                   <div className="flex items-center gap-1.5 font-semibold text-amber-800">
                     <Info className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-                    <span>Google Gmail Authentication Notice:</span>
+                    <span>SMTP Authentication &amp; App Passwords:</span>
                   </div>
                   <p className="text-amber-800 text-[11px] leading-relaxed">
-                    Gmail strictly requires a <strong>16-character App Password</strong> with 2-Step Verification. Normal Gmail account passwords fail with <em>535-5.7.8 BadCredentials</em>.
+                    Personal passwords will fail with error <code className="font-mono bg-amber-100/80 px-1 py-0.5 rounded">535-5.7.8 Authentication Required</code>. Dedicated App Passwords must be used:
                   </p>
-                  <div>
-                    <a
-                      href="https://myaccount.google.com/apppasswords"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-primary hover:underline font-semibold text-[11px]"
-                    >
-                      <span>Generate 16-character App Password at Google</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                    <div className="bg-white/80 p-2.5 rounded-lg border border-amber-200/80">
+                      <strong className="block text-slate-800 mb-0.5">Google / Gmail:</strong>
+                      <span className="text-slate-600 block mb-1">Requires 16-character App Password (2-Step Verification must be ON).</span>
+                      <a
+                        href="https://myaccount.google.com/apppasswords"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-primary hover:underline font-semibold"
+                      >
+                        <span>Generate Google App Password</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                    <div className="bg-white/80 p-2.5 rounded-lg border border-amber-200/80">
+                      <strong className="block text-slate-800 mb-0.5">Zoho Mail:</strong>
+                      <span className="text-slate-600 block mb-1">Host: <code className="font-mono text-[10px]">smtp.zoho.com</code> / Port 465. Requires Zoho Application-Specific Password.</span>
+                      <a
+                        href="https://accounts.zoho.com"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-primary hover:underline font-semibold"
+                      >
+                        <span>Zoho Accounts &gt; Security</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
                   </div>
                 </div>
 
