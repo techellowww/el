@@ -13,72 +13,40 @@ export interface SubProject {
   updatedAt: string;
 }
 
-let tableInitialized = false;
+let tableInitialized = true;
 
 /**
  * Initializes the ch_sub_projects table and indexes if they do not exist.
  * Uses raw PostgreSQL DDL so it never conflicts with Prisma code generation.
  */
 export async function ensureSubProjectsTableExists(): Promise<void> {
-  if (tableInitialized) return;
-  try {
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS clienthub.ch_sub_projects (
-        id TEXT PRIMARY KEY,
-        "projectId" TEXT NOT NULL,
-        "accountId" TEXT NOT NULL,
-        name TEXT NOT NULL,
-        description TEXT,
-        stage TEXT NOT NULL DEFAULT 'IN_PROGRESS',
-        "budgetHours" DOUBLE PRECISION,
-        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
-        "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
-      );
-    `);
-
-    await prisma.$executeRawUnsafe(`
-      CREATE INDEX IF NOT EXISTS idx_sub_projects_project_id
-      ON clienthub.ch_sub_projects("projectId");
-    `);
-
-    await prisma.$executeRawUnsafe(`
-      CREATE INDEX IF NOT EXISTS idx_sub_projects_account_id
-      ON clienthub.ch_sub_projects("accountId");
-    `);
-
-    tableInitialized = true;
-  } catch (error) {
-    console.error('[SubProjectService] Failed to ensure table exists:', error);
-  }
+  // Table is already defined in Prisma schema and migrated.
+  return;
 }
 
 /**
  * Retrieves all sub-projects belonging to a specific project.
  */
 export async function getSubProjectsByProject(projectId: string): Promise<SubProject[]> {
-  await ensureSubProjectsTableExists();
   try {
-    const rows = (await prisma.$queryRawUnsafe(
-      `SELECT id, "projectId", "accountId", name, description, stage, "budgetHours", "createdAt", "updatedAt"
-       FROM clienthub.ch_sub_projects
-       WHERE "projectId" = $1
-       ORDER BY "createdAt" ASC`,
-      projectId
-    )) as any[];
+    const subProjects = await prisma.subProject.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'asc' },
+    });
 
-    return rows.map((r: any) => ({
-      id: r.id,
-      projectId: r.projectId,
-      accountId: r.accountId,
-      name: r.name,
-      description: r.description,
-      stage: r.stage,
-      budgetHours: r.budgetHours !== null ? Number(r.budgetHours) : null,
-      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
-      updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : String(r.updatedAt),
+    return subProjects.map((sp: any) => ({
+      id: sp.id,
+      projectId: sp.projectId,
+      accountId: sp.accountId,
+      name: sp.name,
+      description: sp.description,
+      stage: sp.stage,
+      budgetHours: sp.budgetHours !== null ? Number(sp.budgetHours) : null,
+      createdAt: sp.createdAt instanceof Date ? sp.createdAt.toISOString() : String(sp.createdAt),
+      updatedAt: sp.updatedAt instanceof Date ? sp.updatedAt.toISOString() : String(sp.updatedAt),
     }));
-  } catch (err) {
-    console.error(`[SubProjectService] Error fetching subprojects for ${projectId}:`, err);
+  } catch (err: any) {
+    console.error(`[SubProjectService] Error fetching subprojects for ${projectId}:`, err?.message);
     return [];
   }
 }
@@ -90,43 +58,38 @@ export async function getSubProjectsForProjects(
   projectIds: string[]
 ): Promise<Record<string, SubProject[]>> {
   if (!projectIds || projectIds.length === 0) return {};
-  await ensureSubProjectsTableExists();
+
+  const result: Record<string, SubProject[]> = {};
+  for (const pid of projectIds) {
+    result[pid] = [];
+  }
 
   try {
-    const placeholders = projectIds.map((_, i) => `$${i + 1}`).join(',');
-    const rows = (await prisma.$queryRawUnsafe(
-      `SELECT id, "projectId", "accountId", name, description, stage, "budgetHours", "createdAt", "updatedAt"
-       FROM clienthub.ch_sub_projects
-       WHERE "projectId" IN (${placeholders})
-       ORDER BY "createdAt" ASC`,
-      ...projectIds
-    )) as any[];
+    const subProjects = await prisma.subProject.findMany({
+      where: { projectId: { in: projectIds } },
+      orderBy: { createdAt: 'asc' },
+    });
 
-    const result: Record<string, SubProject[]> = {};
-    for (const pid of projectIds) {
-      result[pid] = [];
-    }
-
-    for (const r of rows) {
-      if (result[r.projectId]) {
-        result[r.projectId].push({
-          id: r.id,
-          projectId: r.projectId,
-          accountId: r.accountId,
-          name: r.name,
-          description: r.description,
-          stage: r.stage,
-          budgetHours: r.budgetHours !== null ? Number(r.budgetHours) : null,
-          createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
-          updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : String(r.updatedAt),
+    for (const sp of subProjects) {
+      if (result[sp.projectId]) {
+        result[sp.projectId].push({
+          id: sp.id,
+          projectId: sp.projectId,
+          accountId: sp.accountId,
+          name: sp.name,
+          description: sp.description,
+          stage: sp.stage,
+          budgetHours: sp.budgetHours !== null ? Number(sp.budgetHours) : null,
+          createdAt: sp.createdAt instanceof Date ? sp.createdAt.toISOString() : String(sp.createdAt),
+          updatedAt: sp.updatedAt instanceof Date ? sp.updatedAt.toISOString() : String(sp.updatedAt),
         });
       }
     }
 
     return result;
-  } catch (err) {
-    console.error('[SubProjectService] Error batch fetching subprojects:', err);
-    return {};
+  } catch (err: any) {
+    console.error('[SubProjectService] Error batch fetching subprojects:', err?.message);
+    return result;
   }
 }
 

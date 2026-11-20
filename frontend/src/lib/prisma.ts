@@ -20,12 +20,12 @@ const prismaClientDir = getPrismaClientDir();
 (globalThis as any).__dirname = prismaClientDir;
 (globalThis as any).__filename = path.join(prismaClientDir, 'index.js');
 
-// Support standard database env aliases (e.g. Vercel Postgres / Neon)
+// Support standard database env aliases (preferring pooled connections on Vercel / serverless)
 const dbUrl =
-  process.env.DATABASE_URL ||
   process.env.POSTGRES_PRISMA_URL ||
-  process.env.POSTGRES_URL ||
-  process.env.VERCEL_POSTGRES_PRISMA_URL;
+  process.env.VERCEL_POSTGRES_PRISMA_URL ||
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL;
 
 if (!process.env.DATABASE_URL && dbUrl) {
   process.env.DATABASE_URL = dbUrl;
@@ -49,11 +49,11 @@ export const prisma =
           log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
         });
         client._schemaVersion = SCHEMA_VERSION;
+        globalForPrisma.prisma = client;
         return client;
       })();
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+// Ensure Prisma client is cached globally across all environments (including serverless execution contexts)
+globalForPrisma.prisma = prisma;
 
 export default prisma;

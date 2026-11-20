@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { requestScreenStream, isScreenStreamActive, stopScreenStream } from '@/lib/screenshotCapture';
 import { useAuthStore, useTimerStore, formatSecondsToTimer, checkIsAfterOfficeHours } from "@/lib/store";
 import { formatLocalDate, getInitials } from "@/lib/utils";
+import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
 import {
   Clock,
   Play,
@@ -61,10 +62,15 @@ const PRESET_OPTIONS = [
   { id: "all_time", label: "All Time" },
 ];
 
+function TimeSheetTimerDigits() {
+  const elapsedSeconds = useTimerStore((s) => s.elapsedSeconds);
+  return <>{formatSecondsToTimer(elapsedSeconds)}</>;
+}
+
 export default function TimeSheetPage() {
   const { user } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
-  const { activeTimer, elapsedSeconds, schedule, startTimer, stopTimer, error } = useTimerStore();
+  const { activeTimer, schedule, startTimer, stopTimer, error } = useTimerStore();
 
   const [projects, setProjects] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -87,8 +93,7 @@ export default function TimeSheetPage() {
 
   // Load projects list
   useEffect(() => {
-    fetch("/api/projects")
-      .then((r) => (r.ok ? r.json() : null))
+    cachedFetch<{ projects: any[] }>("/api/projects")
       .then((pData) => {
         if (pData?.projects) {
           setProjects(pData.projects);
@@ -98,13 +103,12 @@ export default function TimeSheetPage() {
         }
       })
       .catch((err) => console.error("Error fetching projects:", err));
-  }, []);
+  }, [selectedProjectId]);
 
   // Load employees list for Admin filter
   useEffect(() => {
     if (isAdmin) {
-      fetch("/api/employees")
-        .then((r) => (r.ok ? r.json() : null))
+      cachedFetch<{ employees: any[] }>("/api/employees")
         .then((data) => {
           if (data?.employees) {
             setEmployees(data.employees);
@@ -373,7 +377,7 @@ export default function TimeSheetPage() {
             </div>
 
             <div className="font-mono text-3xl sm:text-4xl lg:text-5xl font-semibold text-text-primary tracking-tight">
-              {formatSecondsToTimer(elapsedSeconds)}
+              <TimeSheetTimerDigits />
             </div>
 
             {activeTimer && (

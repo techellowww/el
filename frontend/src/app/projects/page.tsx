@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuthStore, useChatStore } from "@/lib/store";
 import { getStageBadge } from "@/lib/utils";
+import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
 import {
   FolderKanban,
   Plus,
@@ -129,24 +130,17 @@ export default function ProjectsPage() {
     resetSubProjectForm();
   };
 
-  const fetchProjectsAndClients = async () => {
+  const fetchProjectsAndClients = async (forceRefresh = false) => {
     try {
-      const [projRes, clientRes] = await Promise.all([
-        fetch("/api/projects"),
-        fetch("/api/clients"),
+      const [pData, cData] = await Promise.all([
+        cachedFetch<{ projects: any[] }>("/api/projects", { forceRefresh }),
+        cachedFetch<{ clients: any[] }>("/api/clients", { forceRefresh }),
       ]);
 
-      if (projRes.ok) {
-        const pData = await projRes.json();
-        setProjects(pData.projects || []);
-      }
-
-      if (clientRes.ok) {
-        const cData = await clientRes.json();
-        setClients(cData.clients || []);
-        if (cData.clients?.length > 0 && !newClientId) {
-          setNewClientId(cData.clients[0].id);
-        }
+      setProjects(pData.projects || []);
+      setClients(cData.clients || []);
+      if (cData.clients?.length > 0 && !newClientId) {
+        setNewClientId(cData.clients[0].id);
       }
     } catch (err: any) {
       console.error("Failed to load projects:", err);
@@ -193,7 +187,8 @@ export default function ProjectsPage() {
       }
 
       handleCloseCreateModal();
-      fetchProjectsAndClients();
+      invalidateApiCache("/api/projects");
+      fetchProjectsAndClients(true);
     } catch (err: any) {
       setCreateError(err.message || "Failed to create project");
     } finally {
@@ -245,7 +240,8 @@ export default function ProjectsPage() {
       }
 
       handleCloseEditModal();
-      fetchProjectsAndClients();
+      invalidateApiCache("/api/projects");
+      fetchProjectsAndClients(true);
     } catch (err: any) {
       setEditError(err.message || "Failed to update project");
     } finally {
@@ -271,7 +267,8 @@ export default function ProjectsPage() {
       }
 
       setProjectToDelete(null);
-      fetchProjectsAndClients();
+      invalidateApiCache("/api/projects");
+      fetchProjectsAndClients(true);
     } catch (err: any) {
       setDeleteError(err.message || "Failed to delete project");
     } finally {
@@ -304,7 +301,8 @@ export default function ProjectsPage() {
       }
 
       handleClosePostUpdateModal();
-      fetchProjectsAndClients();
+      invalidateApiCache("/api/projects");
+      fetchProjectsAndClients(true);
     } catch (err: any) {
       setPostError(err.message || "Failed to post status update");
     } finally {
@@ -340,7 +338,8 @@ export default function ProjectsPage() {
         alert(data.error || "Failed to update project stage");
         return;
       }
-      fetchProjectsAndClients();
+      invalidateApiCache("/api/projects");
+      fetchProjectsAndClients(true);
     } catch (err: any) {
       alert(err.message || "Failed to update project stage");
     }
@@ -403,7 +402,8 @@ export default function ProjectsPage() {
       }
 
       handleCloseSubProjectModal();
-      fetchProjectsAndClients();
+      invalidateApiCache("/api/projects");
+      fetchProjectsAndClients(true);
     } catch (err: any) {
       setSubProjectError(err.message || "Network error saving sub-project");
     } finally {
@@ -428,7 +428,8 @@ export default function ProjectsPage() {
       }
 
       setSubProjectToDelete(null);
-      fetchProjectsAndClients();
+      invalidateApiCache("/api/projects");
+      fetchProjectsAndClients(true);
     } catch (err: any) {
       alert(err.message || "Failed to delete sub-project");
     } finally {
@@ -444,7 +445,8 @@ export default function ProjectsPage() {
         body: JSON.stringify({ stage: newStage }),
       });
       if (res.ok) {
-        fetchProjectsAndClients();
+        invalidateApiCache("/api/projects");
+      fetchProjectsAndClients(true);
       }
     } catch {}
   };

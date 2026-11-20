@@ -193,6 +193,8 @@ model TimeEntry {
   @@index([clientId])
   @@index([projectId])
   @@index([userId, isRunning])
+  @@index([accountId, startedAt])
+  @@index([userId, startedAt])
   @@map("ch_time_entries")
 }
 
@@ -261,6 +263,7 @@ model Proposal {
   @@index([accountId])
   @@index([clientId])
   @@index([status])
+  @@index([accountId, status])
   @@map("ch_proposals")
 }
 
@@ -348,6 +351,7 @@ model Invoice {
   @@index([accountId])
   @@index([clientId])
   @@index([status])
+  @@index([accountId, status])
   @@map("ch_invoices")
 }
 
@@ -448,6 +452,7 @@ model Notification {
   account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+  @@index([accountId, status])
   @@index([status, scheduledFor])
   @@map("ch_notifications")
 }

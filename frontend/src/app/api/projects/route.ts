@@ -26,39 +26,62 @@ export async function GET(request?: Request) {
     };
   }
 
-  const projects = await prisma.project.findMany({
-    where: whereClause,
-    orderBy: { createdAt: "desc" },
-    include: {
-      client: {
-        select: {
-          id: true,
-          name: true,
-          company: true,
-          email: true,
-          notes: true,
-          assignments: {
-            select: {
-              userId: true,
-              user: { select: { id: true, name: true, email: true, role: true } },
+  const [projects, allSubProjects] = await Promise.all([
+    prisma.project.findMany({
+      where: whereClause,
+      orderBy: { createdAt: "desc" },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            company: true,
+            email: true,
+            notes: true,
+            assignments: {
+              select: {
+                userId: true,
+                user: { select: { id: true, name: true, email: true, role: true } },
+              },
             },
           },
         },
-      },
-      statusUpdates: {
-        orderBy: { createdAt: "desc" },
-        take: 3,
-        include: {
-          user: { select: { id: true, name: true } },
+        statusUpdates: {
+          orderBy: { createdAt: "desc" },
+          take: 3,
+          include: {
+            user: { select: { id: true, name: true } },
+          },
+        },
+        _count: {
+          select: { timeEntries: true },
         },
       },
-      _count: {
-        select: { timeEntries: true },
-      },
-    },
-  });
+    }),
+    prisma.subProject
+      .findMany({
+        where: { accountId: session.accountId },
+        orderBy: { createdAt: "asc" },
+      })
+      .catch(() => []),
+  ]);
 
-  const subProjectsMap = await getSubProjectsForProjects(projects.map((p: any) => p.id));
+  const subProjectsMap: Record<string, any[]> = {};
+  for (const sp of allSubProjects) {
+    if (!subProjectsMap[sp.projectId]) subProjectsMap[sp.projectId] = [];
+    subProjectsMap[sp.projectId].push({
+      id: sp.id,
+      projectId: sp.projectId,
+      accountId: sp.accountId,
+      name: sp.name,
+      description: sp.description,
+      stage: sp.stage,
+      budgetHours: sp.budgetHours !== null ? Number(sp.budgetHours) : null,
+      createdAt: sp.createdAt instanceof Date ? sp.createdAt.toISOString() : String(sp.createdAt),
+      updatedAt: sp.updatedAt instanceof Date ? sp.updatedAt.toISOString() : String(sp.updatedAt),
+    });
+  }
+
   const projectsWithSubProjects = projects.map((p: any) => ({
     ...p,
     subProjects: subProjectsMap[p.id] || [],

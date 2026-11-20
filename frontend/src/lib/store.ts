@@ -56,6 +56,7 @@ interface AuthState {
   token: string | null;
   agencyBranding: AgencyBranding;
   isLoading: boolean;
+  isLoggingOut: boolean;
   setUser: (user: UserSession | null, token?: string | null) => void;
   updateUser: (updates: Partial<UserSession>) => void;
   setAgencyBranding: (branding: Partial<AgencyBranding>) => void;
@@ -64,7 +65,7 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
   agencyBranding: {
@@ -73,6 +74,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     currency: 'USD',
   },
   isLoading: true,
+  isLoggingOut: false,
   setUser: (user, token) => {
     const branding = user?.account
       ? {
@@ -85,6 +87,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       user,
       token: token ?? null,
       isLoading: false,
+      isLoggingOut: false,
       ...(branding ? { agencyBranding: branding } : {}),
     }));
   },
@@ -111,6 +114,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     return null;
   },
   fetchUser: async () => {
+    if (get().isLoggingOut) return null;
     try {
       const res = await fetch('/api/auth/me');
       if (res.ok) {
@@ -126,6 +130,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           token: data.token || null,
           agencyBranding: branding,
           isLoading: false,
+          isLoggingOut: false,
         });
         return data.user;
       } else {
@@ -138,11 +143,22 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
   logout: async () => {
+    // 1. Immediately flag logging out and clear session so no workspace loading screen displays
+    set({ isLoggingOut: true, user: null, token: null, isLoading: false });
+
+    // 2. Stop active timer if any
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-    } finally {
-      set({ user: null });
-      window.location.href = '/login';
+      useTimerStore.getState().stopTimer('User signed out');
+    } catch {}
+
+    // 3. Clear auth cookies via API with keepalive so request completes
+    try {
+      fetch('/api/auth/logout', { method: 'POST', keepalive: true }).catch(() => {});
+    } catch {}
+
+    // 4. Immediately navigate to /login
+    if (typeof window !== 'undefined') {
+      window.location.replace('/login');
     }
   },
 }));

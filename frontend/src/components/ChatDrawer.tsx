@@ -250,7 +250,9 @@ export function ChatDrawer() {
 
     // Initial sync
     fetchUnreadCounts();
-    fetchConversationsHttp();
+    if (isOpenRef.current) {
+      fetchConversationsHttp();
+    }
 
     // Sync every 15 seconds
     const interval = setInterval(() => {

@@ -83,11 +83,51 @@ function getPageMetadata(pathname: string) {
   return { title: 'ClientHub', subtitle: 'Agency Operations Platform', section: 'WORKSPACE' };
 }
 
+function SidebarTimerBadge() {
+  const elapsedSeconds = useTimerStore((s) => s.elapsedSeconds);
+  return (
+    <span className="font-mono text-sm font-bold text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-700">
+      {formatSecondsToTimer(elapsedSeconds)}
+    </span>
+  );
+}
+
+function SidebarTimerLimit({ targetDuration }: { targetDuration: number }) {
+  const elapsedSeconds = useTimerStore((s) => s.elapsedSeconds);
+  return (
+    <div className="mt-2 pt-2 border-t border-slate-700/80">
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-amber-300 font-semibold flex items-center gap-1">
+          <Moon className="w-3 h-3 text-amber-400" /> Planned Limit
+        </span>
+        <span className="font-mono text-amber-200">
+          {targetDuration - elapsedSeconds > 0
+            ? `${formatSecondsToTimer(targetDuration - elapsedSeconds)} left`
+            : 'Limit reached'}
+        </span>
+      </div>
+      <div className="w-full bg-slate-900 rounded-full h-1.5 mt-1.5 overflow-hidden border border-slate-800">
+        <div
+          className="bg-primary h-1.5 rounded-full transition-all duration-300"
+          style={{
+            width: `${Math.min(100, Math.round((elapsedSeconds / targetDuration) * 100))}%`,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MobileTimerBadge() {
+  const elapsedSeconds = useTimerStore((s) => s.elapsedSeconds);
+  return <>{formatSecondsToTimer(elapsedSeconds)}</>;
+}
+
 function ShellRoot({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, agencyBranding, setAgencyBranding, fetchBranding, isLoading, fetchUser, logout } = useAuthStore();
-  const { activeTimer, elapsedSeconds, screenshotSetting, syncActiveTimer, stopTimer, tick } = useTimerStore();
+  const { user, agencyBranding, setAgencyBranding, fetchBranding, isLoading, isLoggingOut, fetchUser, logout } = useAuthStore();
+  const { activeTimer, screenshotSetting, syncActiveTimer, stopTimer, tick } = useTimerStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentDateStr, setCurrentDateStr] = useState('');
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -220,9 +260,10 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       setIsScreenSharing(true);
       ensureVideoPlaying();
       if (user && activeTimer && screenshotSetting?.enabled) {
+        const currentElapsed = useTimerStore.getState().elapsedSeconds;
         const intervalMinutes = Math.max(1, screenshotSetting.intervalMinutes || 15);
         const intervalSec = intervalMinutes * 60;
-        const targetMilestone = Math.floor(elapsedSeconds / intervalSec);
+        const targetMilestone = Math.floor(currentElapsed / intervalSec);
 
         const storageKey = `el_screenshot_milestone_${activeTimer.id}`;
         try {
@@ -237,7 +278,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
           timeEntryId: activeTimer.id,
           projectCode: (activeTimer.project as any)?.code || "",
           projectName: activeTimer.project.name,
-          elapsedSeconds,
+          elapsedSeconds: currentElapsed,
           intervalMinutes,
           intervalIndex: targetMilestone,
         });
@@ -246,47 +287,56 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   };
 
   // Automated screenshot capture: for any user currently running an active timer
+  // Polls milestone status every 5 seconds without triggering 1-second re-renders on AppShell
   useEffect(() => {
-    // Only capture when there is an active running timer, screenshots are enabled in settings, and screen is shared
-    if (!activeTimer || !user || !screenshotSetting?.enabled || !isScreenStreamActive()) {
+    if (!activeTimer || !user || !screenshotSetting?.enabled) {
       return;
     }
 
-    const intervalMinutes = Math.max(1, screenshotSetting.intervalMinutes || 15);
-    const intervalSec = intervalMinutes * 60;
-    const targetMilestone = Math.floor(elapsedSeconds / intervalSec);
+    const checkAndCapture = () => {
+      if (!isScreenStreamActive()) return;
 
-    // Persist milestones per active timer ID so page navigation & refreshes don't drop or duplicate captures
-    const storageKey = `el_screenshot_milestone_${activeTimer.id}`;
-    let lastCapturedMilestone = -1;
-    try {
-      const stored = sessionStorage.getItem(storageKey);
-      lastCapturedMilestone = stored !== null ? parseInt(stored, 10) : -1;
-    } catch {
-      lastCapturedMilestone = lastCapturedIndexRef.current;
-    }
+      const currentElapsed = useTimerStore.getState().elapsedSeconds;
+      const intervalMinutes = Math.max(1, screenshotSetting.intervalMinutes || 15);
+      const intervalSec = intervalMinutes * 60;
+      const targetMilestone = Math.floor(currentElapsed / intervalSec);
 
-    if (targetMilestone > lastCapturedMilestone) {
+      // Persist milestones per active timer ID so page navigation & refreshes don't drop or duplicate captures
+      const storageKey = `el_screenshot_milestone_${activeTimer.id}`;
+      let lastCapturedMilestone = -1;
       try {
-        sessionStorage.setItem(storageKey, String(targetMilestone));
-      } catch {}
-      lastCapturedIndexRef.current = targetMilestone;
+        const stored = sessionStorage.getItem(storageKey);
+        lastCapturedMilestone = stored !== null ? parseInt(stored, 10) : -1;
+      } catch {
+        lastCapturedMilestone = lastCapturedIndexRef.current;
+      }
 
-      captureAndUploadActivityScreenshot({
-        userId: user.id,
-        userName: user.name,
-        employeeId: user.employeeId || "",
-        timeEntryId: activeTimer.id,
-        projectCode: (activeTimer.project as any)?.code || "",
-        projectName: activeTimer.project.name,
-        elapsedSeconds,
-        intervalMinutes,
-        intervalIndex: targetMilestone,
-      }).catch((err) => {
-        console.error('[Screenshot] Capture upload error:', err);
-      });
-    }
-  }, [elapsedSeconds, activeTimer, user, screenshotSetting, isScreenSharing]);
+      if (targetMilestone > lastCapturedMilestone) {
+        try {
+          sessionStorage.setItem(storageKey, String(targetMilestone));
+        } catch {}
+        lastCapturedIndexRef.current = targetMilestone;
+
+        captureAndUploadActivityScreenshot({
+          userId: user.id,
+          userName: user.name,
+          employeeId: user.employeeId || "",
+          timeEntryId: activeTimer.id,
+          projectCode: (activeTimer.project as any)?.code || "",
+          projectName: activeTimer.project.name,
+          elapsedSeconds: currentElapsed,
+          intervalMinutes,
+          intervalIndex: targetMilestone,
+        }).catch((err) => {
+          console.error('[Screenshot] Capture upload error:', err);
+        });
+      }
+    };
+
+    checkAndCapture();
+    const interval = setInterval(checkAndCapture, 5000);
+    return () => clearInterval(interval);
+  }, [activeTimer?.id, user?.id, screenshotSetting?.enabled, screenshotSetting?.intervalMinutes, isScreenSharing]);
 
 
   const isPublicRoute =
@@ -311,24 +361,35 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
         await fetch('/api/mail/dispatch-check');
       } catch {}
     };
-    checkDispatch();
+    const timer = setTimeout(checkDispatch, 5000);
     const interval = setInterval(checkDispatch, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [user]);
 
-  // Initial user fetch (only once if not loaded)
+  // Reset isLoggingOut flag once on login page
   useEffect(() => {
+    if (pathname === '/login' && isLoggingOut) {
+      useAuthStore.setState({ isLoggingOut: false });
+    }
+  }, [pathname, isLoggingOut]);
+
+  // Initial user fetch (only once if not loaded and not logging out)
+  useEffect(() => {
+    if (isLoggingOut || pathname === '/login') return;
     if (!user) {
       if (isPublicRoute) return;
       fetchUser().then((u) => {
         if (!u && !isPublicRoute) {
-          router.push('/login');
+          router.replace('/login');
         } else if (u) {
           syncActiveTimer();
         }
       });
     }
-  }, [user, fetchUser, pathname, router, syncActiveTimer, isPublicRoute]);
+  }, [user, fetchUser, pathname, router, syncActiveTimer, isPublicRoute, isLoggingOut]);
 
   // Real-time 1s ticker for running timer
   useEffect(() => {
@@ -577,12 +638,17 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  // If logging out or unauthenticated on protected route, show clean neutral background matching login page
+  if (isLoggingOut || (!user && !isLoading)) {
+    return <div className="min-h-screen bg-app-background" />;
+  }
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-app-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-400 text-sm font-medium">Entering ClientHub workspace...</p>
+          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-text-secondary text-sm font-medium">Loading workspace...</p>
         </div>
       </div>
     );
@@ -735,9 +801,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                     </span>
                     TRACKING NOW
                   </span>
-                  <span className="font-mono text-sm font-bold text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-700">
-                    {formatSecondsToTimer(elapsedSeconds)}
-                  </span>
+                  <SidebarTimerBadge />
                 </div>
                 <p className="text-xs text-slate-200 font-medium truncate mt-1.5">
                   {activeTimer.project.name}
@@ -755,26 +819,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                     </div>
                   </div>
                 ) : activeTimer.targetDuration ? (
-                  <div className="mt-2 pt-2 border-t border-slate-700/80">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="text-amber-300 font-semibold flex items-center gap-1">
-                        <Moon className="w-3 h-3 text-amber-400" /> Planned Limit
-                      </span>
-                      <span className="font-mono text-amber-200">
-                        {activeTimer.targetDuration - elapsedSeconds > 0
-                          ? `${formatSecondsToTimer(activeTimer.targetDuration - elapsedSeconds)} left`
-                          : 'Limit reached'}
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-900 rounded-full h-1.5 mt-1.5 overflow-hidden border border-slate-800">
-                      <div
-                        className="bg-primary h-1.5 rounded-full transition-all duration-300"
-                        style={{
-                          width: `${Math.min(100, Math.round((elapsedSeconds / activeTimer.targetDuration) * 100))}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
+                  <SidebarTimerLimit targetDuration={activeTimer.targetDuration} />
                 ) : null}
                 {screenshotSetting?.enabled && (
                   <div className="mt-2 pt-2 border-t border-slate-700/80 flex items-center justify-between text-[11px]">
@@ -1170,7 +1215,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                       Active Timer
                     </span>
                     <span className="font-mono text-xs font-bold text-blue-300">
-                      {formatSecondsToTimer(elapsedSeconds)}
+                      <MobileTimerBadge />
                     </span>
                   </div>
                   <p className="text-xs text-white font-medium truncate mb-2">

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuthStore, useChatStore } from "@/lib/store";
+import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
 import {
   Users,
   Plus,
@@ -88,13 +89,10 @@ export default function ClientsPage() {
     setUpdateError(null);
   };
 
-  const fetchClients = async () => {
+  const fetchClients = async (forceRefresh = false) => {
     try {
-      const res = await fetch("/api/clients");
-      if (res.ok) {
-        const data = await res.json();
-        setClients(data.clients || []);
-      }
+      const data = await cachedFetch<{ clients: any[] }>("/api/clients", { forceRefresh });
+      setClients(data.clients || []);
     } catch (err) {
       console.error("Failed to fetch clients:", err);
     } finally {
@@ -102,14 +100,11 @@ export default function ClientsPage() {
     }
   };
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = async (forceRefresh = false) => {
     if (!isAdmin) return;
     try {
-      const res = await fetch("/api/employees");
-      if (res.ok) {
-        const data = await res.json();
-        setEmployees(data.employees || []);
-      }
+      const data = await cachedFetch<{ employees: any[] }>("/api/employees", { forceRefresh });
+      setEmployees(data.employees || []);
     } catch (err) {
       console.error("Failed to fetch employees:", err);
     }
@@ -144,7 +139,8 @@ export default function ClientsPage() {
       const data = await res.json();
       if (res.ok) {
         setCreatedResult(data);
-        fetchClients();
+        invalidateApiCache("/api/clients");
+        fetchClients(true);
       } else {
         setCreateError(data.error || "Failed to create client");
       }
@@ -193,7 +189,8 @@ export default function ClientsPage() {
       const data = await res.json();
       if (res.ok) {
         setEditingClient(null);
-        fetchClients();
+        invalidateApiCache("/api/clients");
+        fetchClients(true);
       } else {
         setUpdateError(data.error || "Failed to update client");
       }
@@ -219,7 +216,8 @@ export default function ClientsPage() {
         const deletedId = clientToDelete.id;
         setClientToDelete(null);
         setClients((prev) => prev.filter((c) => c.id !== deletedId));
-        await fetchClients();
+        invalidateApiCache("/api/clients");
+        await fetchClients(true);
       } else {
         setDeleteError(data.error || "Failed to delete client");
       }

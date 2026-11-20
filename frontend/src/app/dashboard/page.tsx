@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { requestScreenStream, isScreenStreamActive, stopScreenStream } from '@/lib/screenshotCapture';
 import { useAuthStore, useTimerStore, formatSecondsToTimer, checkIsAfterOfficeHours } from "@/lib/store";
 import { getStageBadge } from "@/lib/utils";
+import { cachedFetch } from "@/lib/apiCache";
 import {
   FolderKanban,
   Users,
@@ -26,9 +27,26 @@ import {
   RefreshCw,
 } from "lucide-react";
 
+function DashboardLiveTimerDigit({ fallbackBaseSeconds, hasActiveTimer }: { fallbackBaseSeconds: number; hasActiveTimer: boolean }) {
+  const elapsedSeconds = useTimerStore((s) => s.elapsedSeconds);
+  const displayVal = hasActiveTimer ? elapsedSeconds : fallbackBaseSeconds;
+  return <>{formatSecondsToTimer(displayVal)}</>;
+}
+
+function DashboardStopButtonTime() {
+  const elapsedSeconds = useTimerStore((s) => s.elapsedSeconds);
+  return <span>Stop ({formatSecondsToTimer(elapsedSeconds)})</span>;
+}
+
+function DashboardTodayLoggedTime({ baseEntriesSeconds, hasActiveTimer }: { baseEntriesSeconds: number; hasActiveTimer: boolean }) {
+  const elapsedSeconds = useTimerStore((s) => s.elapsedSeconds);
+  const total = baseEntriesSeconds + (hasActiveTimer ? elapsedSeconds : 0);
+  return <>{formatSecondsToTimer(total)}</>;
+}
+
 export default function DashboardPage() {
   const { user } = useAuthStore();
-  const { activeTimer, elapsedSeconds, schedule, startTimer, stopTimer, error: timerStoreError } = useTimerStore();
+  const { activeTimer, schedule, startTimer, stopTimer, error: timerStoreError } = useTimerStore();
 
   const [clients, setClients] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -54,43 +72,25 @@ export default function DashboardPage() {
     async function loadDashboard() {
       try {
         const isAdminUser = user?.role === "ADMIN";
-        const [clientRes, projRes, timeRes, invRes, propRes, alertRes] = await Promise.all([
-          fetch("/api/clients"),
-          fetch("/api/projects"),
-          fetch("/api/time"),
-          isAdminUser ? fetch("/api/invoices?status=SENT").catch(() => null) : Promise.resolve(null),
-          isAdminUser ? fetch("/api/proposals?status=SENT").catch(() => null) : Promise.resolve(null),
-          isAdminUser ? fetch("/api/notifications/alerts").catch(() => null) : Promise.resolve(null),
+        const [cData, pData, tData, iData, prData, aData] = await Promise.all([
+          cachedFetch<{ clients: any[] }>("/api/clients").catch(() => ({ clients: [] })),
+          cachedFetch<{ projects: any[] }>("/api/projects").catch(() => ({ projects: [] })),
+          cachedFetch<{ entries: any[] }>("/api/time").catch(() => ({ entries: [] })),
+          isAdminUser ? cachedFetch<{ invoices: any[] }>("/api/invoices?status=SENT").catch(() => ({ invoices: [] })) : Promise.resolve({ invoices: [] }),
+          isAdminUser ? cachedFetch<{ proposals: any[] }>("/api/proposals?status=SENT").catch(() => ({ proposals: [] })) : Promise.resolve({ proposals: [] }),
+          isAdminUser ? cachedFetch<{ alerts: any[] }>("/api/notifications/alerts").catch(() => ({ alerts: [] })) : Promise.resolve({ alerts: [] }),
         ]);
 
-        if (clientRes.ok) {
-          const cData = await clientRes.json();
-          setClients(cData.clients || []);
+        setClients(cData.clients || []);
+        const fetchedProjects = pData.projects || [];
+        setProjects(fetchedProjects);
+        if (fetchedProjects.length > 0) {
+          setQuickProjectId((prev) => prev || fetchedProjects[0].id);
         }
-        if (projRes.ok) {
-          const pData = await projRes.json();
-          const fetchedProjects = pData.projects || [];
-          setProjects(fetchedProjects);
-          if (fetchedProjects.length > 0) {
-            setQuickProjectId((prev) => prev || fetchedProjects[0].id);
-          }
-        }
-        if (timeRes.ok) {
-          const tData = await timeRes.json();
-          setRecentEntries(tData.entries || []);
-        }
-        if (invRes && invRes.ok) {
-          const iData = await invRes.json();
-          setUnpaidInvoices(iData.invoices || []);
-        }
-        if (propRes && propRes.ok) {
-          const prData = await propRes.json();
-          setPendingProposals(prData.proposals || []);
-        }
-        if (alertRes && alertRes.ok) {
-          const aData = await alertRes.json();
-          setFailedAlerts(aData.alerts || []);
-        }
+        setRecentEntries(tData.entries || []);
+        setUnpaidInvoices(iData.invoices || []);
+        setPendingProposals(prData.proposals || []);
+        setFailedAlerts(aData.alerts || []);
       } catch (err) {
         console.error("Dashboard data load error:", err);
       } finally {
@@ -99,7 +99,7 @@ export default function DashboardPage() {
     }
 
     loadDashboard();
-  }, [activeTimer]);
+  }, [activeTimer?.id]);
 
   const handleRetryAlerts = async () => {
     setIsRetryingAlerts(true);
@@ -208,12 +208,13 @@ export default function DashboardPage() {
   const isAdmin = user?.role === "ADMIN";
 
   // Calculate today's tracked seconds from entries
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  const todayTrackedSeconds = recentEntries
-    .filter((e) => new Date(e.startedAt) >= todayStart)
-    .reduce((sum, e) => sum + (e.durationSeconds || 0), 0) + (activeTimer ? elapsedSeconds : 0);
+  const baseTodayEntriesSeconds = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    return recentEntries
+      .filter((e) => new Date(e.startedAt) >= todayStart)
+      .reduce((sum, e) => sum + (e.durationSeconds || 0), 0);
+  }, [recentEntries]);
 
 
   return (
