@@ -73,6 +73,13 @@ export function extractTokenFromRequest(request: Request): string | null {
   return null;
 }
 
+const authUserCache = new Map<string, { user: AuthUser; timestamp: number }>();
+
+export function invalidateAuthUserCache(userId?: string) {
+  if (userId) authUserCache.delete(userId);
+  else authUserCache.clear();
+}
+
 /**
  * Authenticates the user from the incoming request and verifies account status against DB.
  */
@@ -90,6 +97,13 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
   const decoded = verifyToken(token) as any;
   const userId = decoded?.id || decoded?.userId;
   if (!userId) return null;
+
+  // Check 15-second in-memory server cache to avoid repeated DB lookups on every request
+  const cached = authUserCache.get(userId);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < 15000) {
+    return cached.user;
+  }
 
   let user: any = null;
   try {
@@ -159,7 +173,7 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
 
   if (!user || !user.isActive) return null;
 
-  return {
+  const authUser: AuthUser = {
     id: user.id,
     accountId: user.accountId,
     email: user.email,
@@ -182,6 +196,9 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
         }
       : undefined,
   };
+
+  authUserCache.set(user.id, { user: authUser, timestamp: Date.now() });
+  return authUser;
 }
 
 export function setAuthCookie(response: NextResponse, token: string): void {

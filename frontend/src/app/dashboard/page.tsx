@@ -278,7 +278,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="font-mono text-2xl sm:text-[28px] font-bold text-text-primary tracking-tight">
-              {formatSecondsToTimer(activeTimer ? elapsedSeconds : todayTrackedSeconds)}
+              <DashboardLiveTimerDigit fallbackBaseSeconds={baseTodayEntriesSeconds} hasActiveTimer={Boolean(activeTimer)} />
             </div>
 
             {activeTimer ? (
@@ -418,7 +418,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between text-[11px] text-text-secondary pt-1 border-t border-border/60">
               <span>Today&apos;s logged time:</span>
               <span className="font-mono font-semibold text-text-primary">
-                {formatSecondsToTimer(todayTrackedSeconds)}
+                <DashboardTodayLoggedTime baseEntriesSeconds={baseTodayEntriesSeconds} hasActiveTimer={Boolean(activeTimer)} />
               </span>
             </div>
           </div>
@@ -521,7 +521,7 @@ export default function DashboardPage() {
             <Clock className="w-4 h-4 text-success" />
           </div>
           <div className="text-2xl font-bold text-text-primary font-mono">
-            {formatSecondsToTimer(todayTrackedSeconds)}
+            <DashboardTodayLoggedTime baseEntriesSeconds={baseTodayEntriesSeconds} hasActiveTimer={Boolean(activeTimer)} />
           </div>
           <p className="text-[11px] text-text-secondary flex items-center justify-between pt-1.5 border-t border-border">
             <span>Max 24h/day</span>
@@ -762,7 +762,7 @@ export default function DashboardPage() {
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-error border border-red-200 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                         >
                           <Square className="w-3 h-3 fill-current" />
-                          <span>Stop ({formatSecondsToTimer(elapsedSeconds)})</span>
+                          <DashboardStopButtonTime />
                         </button>
                       ) : isAfterHours ? (
                         <button

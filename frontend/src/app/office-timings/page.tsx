@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuthStore, useTimerStore } from '@/lib/store';
+import { cachedFetch, invalidateApiCache } from '@/lib/apiCache';
 import {
   Building2,
   Clock,
@@ -86,48 +87,46 @@ export default function OfficeTimingsPage() {
     loadSettings();
   }, []);
 
-  const loadSettings = async () => {
+  const loadSettings = async (forceRefresh = false) => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/office-timings', {
-        credentials: 'include',
+      const data = await cachedFetch<{ schedule?: any }>('/api/office-timings', {
+        forceRefresh,
+        init: { credentials: 'include' },
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.schedule) {
-          setAutoCutoffEnabled(data.schedule.autoCutoffEnabled ?? true);
-          setTimezone(data.schedule.timezone || 'Asia/Kolkata');
+      if (data?.schedule) {
+        setAutoCutoffEnabled(data.schedule.autoCutoffEnabled ?? true);
+        setTimezone(data.schedule.timezone || 'Asia/Kolkata');
 
-          if (data.schedule.dayTimings) {
-            try {
-              const parsed = typeof data.schedule.dayTimings === 'string'
-                ? JSON.parse(data.schedule.dayTimings)
-                : data.schedule.dayTimings;
-              setDaySchedules({
-                MON: parsed.MON || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
-                TUE: parsed.TUE || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
-                WED: parsed.WED || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
-                THU: parsed.THU || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
-                FRI: parsed.FRI || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
-                SAT: parsed.SAT || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
-                SUN: parsed.SUN || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
-              });
-            } catch {
-              // fallback
-            }
-          } else {
-            const defaultStart = data.schedule.openingTime || '09:00';
-            const defaultEnd = data.schedule.closingTime || '18:00';
+        if (data.schedule.dayTimings) {
+          try {
+            const parsed = typeof data.schedule.dayTimings === 'string'
+              ? JSON.parse(data.schedule.dayTimings)
+              : data.schedule.dayTimings;
             setDaySchedules({
-              MON: { start: defaultStart, end: defaultEnd },
-              TUE: { start: defaultStart, end: defaultEnd },
-              WED: { start: defaultStart, end: defaultEnd },
-              THU: { start: defaultStart, end: defaultEnd },
-              FRI: { start: defaultStart, end: defaultEnd },
-              SAT: { start: defaultStart, end: defaultEnd },
-              SUN: { start: defaultStart, end: defaultEnd },
+              MON: parsed.MON || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
+              TUE: parsed.TUE || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
+              WED: parsed.WED || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
+              THU: parsed.THU || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
+              FRI: parsed.FRI || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
+              SAT: parsed.SAT || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
+              SUN: parsed.SUN || { start: data.schedule.openingTime || '09:00', end: data.schedule.closingTime || '18:00' },
             });
+          } catch {
+            // fallback
           }
+        } else {
+          const defaultStart = data.schedule.openingTime || '09:00';
+          const defaultEnd = data.schedule.closingTime || '18:00';
+          setDaySchedules({
+            MON: { start: defaultStart, end: defaultEnd },
+            TUE: { start: defaultStart, end: defaultEnd },
+            WED: { start: defaultStart, end: defaultEnd },
+            THU: { start: defaultStart, end: defaultEnd },
+            FRI: { start: defaultStart, end: defaultEnd },
+            SAT: { start: defaultStart, end: defaultEnd },
+            SUN: { start: defaultStart, end: defaultEnd },
+          });
         }
       }
     } catch (err) {
@@ -204,7 +203,8 @@ export default function OfficeTimingsPage() {
           type: 'success',
           text: 'Office timings and automatic timer stop settings saved successfully.',
         });
-        await loadSettings();
+        invalidateApiCache('/api/office-timings');
+        await loadSettings(true);
         syncActiveTimer();
       }
     } catch {

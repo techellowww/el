@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
 import { logAuditEvent } from '@/lib/server/audit';
 import { prisma } from '@/lib/prisma';
+import { invalidateOfficeScheduleCache } from '@/lib/server/timerEngine';
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,8 @@ export async function PUT(request: Request) {
         updatedById: session?.userId || null,
       },
     });
+
+    invalidateOfficeScheduleCache();
 
     if (session?.userId) {
       try {

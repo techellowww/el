@@ -6,6 +6,7 @@ import { useAuthStore, useTimerStore } from '@/lib/store';
 import { formatLocalDate } from '@/lib/utils';
 import { requestScreenStream, isScreenStreamActive, captureAndUploadActivityScreenshot } from '@/lib/screenshotCapture';
 import { ConfirmModal } from '@/components/MiniModal';
+import { cachedFetch, invalidateApiCache } from '@/lib/apiCache';
 import JSZip from 'jszip';
 import {
   Camera,
@@ -128,22 +129,19 @@ export default function ScreenshotModulePage() {
     }
   }, [filterUserId, filterProjectId, filterStartDate, filterEndDate, isAdmin]);
 
-  const loadSettings = async () => {
+  const loadSettings = async (forceRefresh = false) => {
     try {
-      const res = await fetch('/api/screenshots/settings');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.settings) {
-          setEnabled(Boolean(data.settings.enabled));
-          setIntervalMinutes(data.settings.intervalMinutes || 60);
-          setRetentionDays(data.settings.retentionDays || 30);
-          if (typeof data.settings.autoBackupEnabled === 'boolean') {
-            setAutoBackupEnabled(data.settings.autoBackupEnabled);
-          }
-          if (data.settings.backupDrivePath) {
-            setBackupDrivePath(data.settings.backupDrivePath);
-            setTargetDrivePath(data.settings.backupDrivePath);
-          }
+      const data = await cachedFetch<{ settings?: any }>('/api/screenshots/settings', { forceRefresh });
+      if (data?.settings) {
+        setEnabled(Boolean(data.settings.enabled));
+        setIntervalMinutes(data.settings.intervalMinutes || 60);
+        setRetentionDays(data.settings.retentionDays || 30);
+        if (typeof data.settings.autoBackupEnabled === 'boolean') {
+          setAutoBackupEnabled(data.settings.autoBackupEnabled);
+        }
+        if (data.settings.backupDrivePath) {
+          setBackupDrivePath(data.settings.backupDrivePath);
+          setTargetDrivePath(data.settings.backupDrivePath);
         }
       }
     } catch (err) {
@@ -151,25 +149,19 @@ export default function ScreenshotModulePage() {
     }
   };
 
-  const loadEmployees = async () => {
+  const loadEmployees = async (forceRefresh = false) => {
     try {
-      const res = await fetch('/api/employees');
-      if (res.ok) {
-        const data = await res.json();
-        setEmployeesList(data.employees || []);
-      }
+      const data = await cachedFetch<{ employees?: any[] }>('/api/employees', { forceRefresh });
+      setEmployeesList(data.employees || []);
     } catch {
       // ignore
     }
   };
 
-  const loadProjects = async () => {
+  const loadProjects = async (forceRefresh = false) => {
     try {
-      const res = await fetch('/api/projects');
-      if (res.ok) {
-        const data = await res.json();
-        setProjectsList(data.projects || []);
-      }
+      const data = await cachedFetch<{ projects?: any[] }>('/api/projects', { forceRefresh });
+      setProjectsList(data.projects || []);
     } catch {
       // ignore
     }
@@ -252,6 +244,7 @@ export default function ScreenshotModulePage() {
 
       const data = await res.json();
       if (res.ok) {
+        invalidateApiCache('/api/screenshots/settings');
         setMessage({
           type: 'success',
           text: `Screenshot configuration saved. Status: ${payload.enabled ? 'Active' : 'Disabled'}, Interval: ${payload.intervalMinutes}m, Retention: ${payload.retentionDays} days, Auto-Backup: ${payload.autoBackupEnabled ? 'Enabled' : 'Disabled'}.`,
@@ -428,6 +421,7 @@ export default function ScreenshotModulePage() {
       });
       const data = await res.json();
       if (res.ok) {
+        invalidateApiCache('/api/screenshots/settings');
         setMessage({
           type: 'success',
           text: data.message || `Cleanup complete: ${data.deletedCount || 0} old screenshots purged.`,
@@ -519,6 +513,7 @@ export default function ScreenshotModulePage() {
 
       const data = await res.json();
       if (res.ok) {
+        invalidateApiCache('/api/screenshots/settings');
         setMessage({
           type: 'success',
           text: `Successfully deleted ${data.deletedCount || selectedIds.size} screenshot(s).`,
@@ -549,6 +544,7 @@ export default function ScreenshotModulePage() {
       });
       const data = await res.json();
       if (res.ok) {
+        invalidateApiCache('/api/screenshots/settings');
         setMessage({
           type: 'success',
           text: 'Screenshot successfully deleted.',

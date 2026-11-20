@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuthStore, formatSecondsToTimer } from "@/lib/store";
 import { getInitials } from "@/lib/utils";
+import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
 import {
   Users,
   Plus,
@@ -83,17 +84,11 @@ export default function EmployeesPage() {
 
   const isAdmin = user?.role === "ADMIN";
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = async (forceRefresh = false) => {
     try {
-      const res = await fetch("/api/employees");
-      if (res.ok) {
-        const data = await res.json();
-        setEmployees(data.employees || []);
-        setClients(data.clients || []);
-      } else {
-        const errData = await res.json();
-        setError(errData.error || "Failed to load employees");
-      }
+      const data = await cachedFetch<{ employees: any[]; clients: any[] }>("/api/employees", { forceRefresh });
+      setEmployees(data.employees || []);
+      setClients(data.clients || []);
     } catch (err: any) {
       console.error("Failed to load employees:", err);
       setError("Network error loading team members.");
@@ -185,7 +180,9 @@ export default function EmployeesPage() {
       }
 
       handleCloseModal();
-      fetchEmployees();
+      invalidateApiCache("/api/employees");
+      invalidateApiCache("/api/clients");
+      fetchEmployees(true);
     } catch (err: any) {
       setModalError(err.message || "Failed to save employee");
     } finally {
@@ -201,7 +198,8 @@ export default function EmployeesPage() {
         body: JSON.stringify({ isActive: !emp.isActive }),
       });
       if (res.ok) {
-        fetchEmployees();
+        invalidateApiCache("/api/employees");
+        fetchEmployees(true);
       }
     } catch (err) {
       console.error("Failed to toggle employee active status:", err);
@@ -225,7 +223,9 @@ export default function EmployeesPage() {
       }
 
       setEmpToDelete(null);
-      fetchEmployees();
+      invalidateApiCache("/api/employees");
+      invalidateApiCache("/api/clients");
+      fetchEmployees(true);
     } catch (err: any) {
       alert(err.message || "Error deleting employee");
     } finally {

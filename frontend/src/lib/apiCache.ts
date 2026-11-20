@@ -1,6 +1,6 @@
 /**
- * Lightweight in-memory client-side API response cache with TTL & Stale-While-Revalidate.
- * Eliminates redundant network calls and makes page transitions (Dashboard <-> Projects <-> Clients) instant.
+ * Lightweight in-memory client-side API response cache with TTL & request deduplication.
+ * Eliminates redundant network calls and makes page transitions across all modules instant.
  */
 
 interface CacheEntry<T> {
@@ -9,16 +9,17 @@ interface CacheEntry<T> {
 }
 
 const cacheStore = new Map<string, CacheEntry<any>>();
+const inFlightRequests = new Map<string, Promise<any>>();
 
 export async function cachedFetch<T = any>(
   url: string,
   options?: {
-    ttlMs?: number; // default: 15 seconds
+    ttlMs?: number; // default: 30 seconds
     forceRefresh?: boolean;
     init?: RequestInit;
   }
 ): Promise<T> {
-  const ttl = options?.ttlMs ?? 15000;
+  const ttl = options?.ttlMs ?? 30000;
   const now = Date.now();
   const cached = cacheStore.get(url);
 
@@ -26,15 +27,29 @@ export async function cachedFetch<T = any>(
     return cached.data;
   }
 
-  const res = await fetch(url, options?.init);
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Request to ${url} failed with status ${res.status}`);
+  // Deduplicate concurrent in-flight requests for the exact same URL
+  if (!options?.forceRefresh && inFlightRequests.has(url)) {
+    return inFlightRequests.get(url)!;
   }
 
-  const data = await res.json();
-  cacheStore.set(url, { data, timestamp: now });
-  return data;
+  const fetchPromise = (async () => {
+    try {
+      const res = await fetch(url, options?.init);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Request to ${url} failed with status ${res.status}`);
+      }
+
+      const data = await res.json();
+      cacheStore.set(url, { data, timestamp: Date.now() });
+      return data;
+    } finally {
+      inFlightRequests.delete(url);
+    }
+  })();
+
+  inFlightRequests.set(url, fetchPromise);
+  return fetchPromise;
 }
 
 export function invalidateApiCache(urlPrefix?: string): void {

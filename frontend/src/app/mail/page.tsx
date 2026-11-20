@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '@/lib/store';
+import { cachedFetch, invalidateApiCache } from '@/lib/apiCache';
 import {
   Mail,
   Send,
@@ -138,19 +139,16 @@ export default function MailModulePage() {
       .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
   };
 
-  const loadAll = async () => {
+  const loadAll = async (forceRefresh = false) => {
     setIsLoading(true);
-    await Promise.all([loadSettings(), loadAuditLogs(), loadFailedAlerts()]);
+    await Promise.all([loadSettings(forceRefresh), loadAuditLogs(forceRefresh), loadFailedAlerts(forceRefresh)]);
     setIsLoading(false);
   };
 
-  const loadFailedAlerts = async () => {
+  const loadFailedAlerts = async (forceRefresh = false) => {
     try {
-      const res = await fetch('/api/notifications/alerts');
-      if (res.ok) {
-        const data = await res.json();
-        setFailedAlerts(data.alerts || []);
-      }
+      const data = await cachedFetch<{ alerts?: any[] }>('/api/notifications/alerts', { forceRefresh });
+      setFailedAlerts(data.alerts || []);
     } catch (err) {
       console.error('Failed to load failed alerts:', err);
     }
@@ -171,7 +169,9 @@ export default function MailModulePage() {
           type: 'success',
           text: `Retried ${data.retriedCount || 0} failed notification(s). Remaining failed: ${(data.alerts || []).length}.`,
         });
-        loadAuditLogs();
+        invalidateApiCache('/api/notifications/alerts');
+        invalidateApiCache('/api/mail/audit');
+        loadAuditLogs(true);
       }
     } catch (err) {
       console.error('Failed to retry alerts:', err);
@@ -190,6 +190,7 @@ export default function MailModulePage() {
       });
       if (res.ok) {
         setFailedAlerts([]);
+        invalidateApiCache('/api/notifications/alerts');
         setMessage({
           type: 'success',
           text: 'Failed notification delivery alerts have been dismissed.',
@@ -202,48 +203,42 @@ export default function MailModulePage() {
     }
   };
 
-  const loadSettings = async () => {
+  const loadSettings = async (forceRefresh = false) => {
     try {
-      const res = await fetch('/api/mail/settings');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.envDefaults) {
-          setHasEnvPass(Boolean(data.envDefaults.hasEnvPass));
-        }
-        const s = data.settings || data.setting;
-        if (s) {
-          setEnabled(s.enabled ?? true);
-          setScheduleType(
-            (s.scheduleType as 'DAILY' | 'WEEKLY' | 'MONTHLY') || 'DAILY'
-          );
-          setScheduleTime(s.scheduleTime || s.dailyTime || '18:00');
-          setWeeklyDay(s.weeklyDay || 'FRI');
-          setMonthlyDay(s.monthlyDay || 1);
+      const data = await cachedFetch<{ envDefaults?: any; settings?: any; setting?: any }>('/api/mail/settings', { forceRefresh });
+      if (data.envDefaults) {
+        setHasEnvPass(Boolean(data.envDefaults.hasEnvPass));
+      }
+      const s = data.settings || data.setting;
+      if (s) {
+        setEnabled(s.enabled ?? true);
+        setScheduleType(
+          (s.scheduleType as 'DAILY' | 'WEEKLY' | 'MONTHLY') || 'DAILY'
+        );
+        setScheduleTime(s.scheduleTime || s.dailyTime || '18:00');
+        setWeeklyDay(s.weeklyDay || 'FRI');
+        setMonthlyDay(s.monthlyDay || 1);
 
-          const rawRecipients: string = s.recipients || 'admin@company.com';
-          const parsed = parseEmails(rawRecipients);
-          setRecipientList(parsed.length > 0 ? parsed : ['admin@company.com']);
+        const rawRecipients: string = s.recipients || 'admin@company.com';
+        const parsed = parseEmails(rawRecipients);
+        setRecipientList(parsed.length > 0 ? parsed : ['admin@company.com']);
 
-          setSmtpHost(s.smtpHost || data.envDefaults?.smtpHost || 'smtp.gmail.com');
-          setSmtpPort(s.smtpPort || data.envDefaults?.smtpPort || 587);
-          setSmtpUser(s.smtpUser || data.envDefaults?.smtpUser || '');
-          setSmtpPass(s.smtpPass || '');
-          setSmtpFrom(s.smtpFrom || data.envDefaults?.smtpFrom || 'ClientHub Notifications <notifications@clienthub.local>');
-        }
+        setSmtpHost(s.smtpHost || data.envDefaults?.smtpHost || 'smtp.gmail.com');
+        setSmtpPort(s.smtpPort || data.envDefaults?.smtpPort || 587);
+        setSmtpUser(s.smtpUser || data.envDefaults?.smtpUser || '');
+        setSmtpPass(s.smtpPass || '');
+        setSmtpFrom(s.smtpFrom || data.envDefaults?.smtpFrom || 'ClientHub Notifications <notifications@clienthub.local>');
       }
     } catch (err) {
       console.error('Failed to load mail settings:', err);
     }
   };
 
-  const loadAuditLogs = async () => {
+  const loadAuditLogs = async (forceRefresh = false) => {
     setIsAuditLoading(true);
     try {
-      const res = await fetch('/api/mail/audit');
-      if (res.ok) {
-        const data = await res.json();
-        setAuditLogs(data.logs || []);
-      }
+      const data = await cachedFetch<{ logs?: any[] }>('/api/mail/audit', { forceRefresh });
+      setAuditLogs(data.logs || []);
     } catch (err) {
       console.error('Failed to load mail audit list:', err);
     } finally {
@@ -314,6 +309,7 @@ export default function MailModulePage() {
       if (!res.ok) {
         setMessage({ type: 'error', text: data.error || 'Failed to update email schedule settings' });
       } else {
+        invalidateApiCache('/api/mail/settings');
         setMessage({
           type: 'success',
           text: `Mail settings saved successfully. ${scheduleType} reports configured for ${recipientList.length} recipient(s).`,
@@ -543,7 +539,7 @@ export default function MailModulePage() {
           <button
             id="refresh-mail-data-btn"
             data-testid="refresh-mail-data-btn"
-            onClick={loadAll}
+            onClick={() => loadAll(true)}
             disabled={isLoading || isAuditLoading}
             className="px-3 py-2 rounded-xl bg-white border border-border hover:bg-slate-50 text-text-secondary hover:text-text-primary text-xs font-semibold flex items-center gap-2 transition shadow-xs cursor-pointer disabled:opacity-50"
           >
@@ -1368,7 +1364,7 @@ export default function MailModulePage() {
             type="button"
             id="refresh-audit-list-btn"
             data-testid="refresh-audit-list-btn"
-            onClick={loadAuditLogs}
+            onClick={() => loadAuditLogs(true)}
             disabled={isAuditLoading}
             className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-text-secondary hover:text-text-primary text-xs font-semibold flex items-center gap-1.5 transition self-start sm:self-auto cursor-pointer"
           >

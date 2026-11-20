@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuthStore } from "@/lib/store";
+import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
 import {
   FileText,
   Plus,
@@ -82,13 +83,10 @@ export default function InvoicesPage() {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
-  const fetchInvoices = async () => {
+  const fetchInvoices = async (forceRefresh = false) => {
     try {
-      const res = await fetch("/api/invoices");
-      if (res.ok) {
-        const data = await res.json();
-        setInvoices(data.invoices || []);
-      }
+      const data = await cachedFetch<{ invoices: any[] }>("/api/invoices", { forceRefresh });
+      setInvoices(data.invoices || []);
     } catch (err) {
       console.error("Failed to load invoices:", err);
     } finally {
@@ -96,17 +94,14 @@ export default function InvoicesPage() {
     }
   };
 
-  const fetchClientsAndProjects = async () => {
+  const fetchClientsAndProjects = async (forceRefresh = false) => {
     try {
-      const [cRes, pRes] = await Promise.all([fetch("/api/clients"), fetch("/api/projects")]);
-      if (cRes.ok) {
-        const cData = await cRes.json();
-        setClients(cData.clients || []);
-      }
-      if (pRes.ok) {
-        const pData = await pRes.json();
-        setProjects(pData.projects || []);
-      }
+      const [cData, pData] = await Promise.all([
+        cachedFetch<{ clients: any[] }>("/api/clients", { forceRefresh }),
+        cachedFetch<{ projects: any[] }>("/api/projects", { forceRefresh }),
+      ]);
+      setClients(cData.clients || []);
+      setProjects(pData.projects || []);
     } catch (err) {
       console.error("Failed to load metadata:", err);
     }
@@ -205,7 +200,8 @@ export default function InvoicesPage() {
       }
 
       handleCloseCreateModal();
-      fetchInvoices();
+      invalidateApiCache("/api/invoices");
+      fetchInvoices(true);
     } catch (err: any) {
       setCreateError(err.message || "Failed to create invoice");
     } finally {
@@ -231,7 +227,9 @@ export default function InvoicesPage() {
 
       setActionSuccessMsg(`Invoice ${data.invoice.invoiceNumberDisplay} sent to client successfully!`);
       setTimeout(() => setActionSuccessMsg(null), 5000);
-      fetchInvoices();
+      invalidateApiCache("/api/invoices");
+      invalidateApiCache("/api/time");
+      fetchInvoices(true);
     } catch (err: any) {
       alert(err.message || "Failed to send invoice");
     } finally {
@@ -257,7 +255,8 @@ export default function InvoicesPage() {
 
       setActionSuccessMsg("Invoice marked as PAID and payment confirmed.");
       setTimeout(() => setActionSuccessMsg(null), 5000);
-      fetchInvoices();
+      invalidateApiCache("/api/invoices");
+      fetchInvoices(true);
     } catch (err: any) {
       alert(err.message || "Failed to record payment");
     } finally {
@@ -282,7 +281,9 @@ export default function InvoicesPage() {
 
       setActionSuccessMsg("Invoice voided successfully. Time entries unlocked.");
       setTimeout(() => setActionSuccessMsg(null), 5000);
-      fetchInvoices();
+      invalidateApiCache("/api/invoices");
+      invalidateApiCache("/api/time");
+      fetchInvoices(true);
     } catch (err: any) {
       alert(err.message || "Failed to void invoice");
     } finally {
@@ -304,7 +305,8 @@ export default function InvoicesPage() {
       setActionSuccessMsg(`Invoice ${invoiceToDelete.invoiceNumberDisplay || "DRAFT"} deleted successfully.`);
       setTimeout(() => setActionSuccessMsg(null), 4000);
       setInvoiceToDelete(null);
-      fetchInvoices();
+      invalidateApiCache("/api/invoices");
+      fetchInvoices(true);
     } catch (err: any) {
       alert(err.message || "Failed to delete invoice");
     } finally {
@@ -356,7 +358,8 @@ export default function InvoicesPage() {
       setTimeout(() => setActionSuccessMsg(null), 4000);
       setSelectedIds([]);
       setShowBulkDeleteModal(false);
-      fetchInvoices();
+      invalidateApiCache("/api/invoices");
+      fetchInvoices(true);
     } catch (err: any) {
       alert(err.message || "Failed to delete invoices");
     } finally {

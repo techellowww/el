@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuthStore } from "@/lib/store";
+import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
 import {
   FileText,
   Plus,
@@ -96,13 +97,10 @@ export default function ProposalsPage() {
     resetForm();
   };
 
-  const fetchProposals = async () => {
+  const fetchProposals = async (forceRefresh = false) => {
     try {
-      const res = await fetch("/api/proposals");
-      if (res.ok) {
-        const data = await res.json();
-        setProposals(data.proposals || []);
-      }
+      const data = await cachedFetch<{ proposals: any[] }>("/api/proposals", { forceRefresh });
+      setProposals(data.proposals || []);
     } catch (err) {
       console.error("Failed to load proposals:", err);
     } finally {
@@ -110,17 +108,14 @@ export default function ProposalsPage() {
     }
   };
 
-  const fetchClientsAndProjects = async () => {
+  const fetchClientsAndProjects = async (forceRefresh = false) => {
     try {
-      const [cRes, pRes] = await Promise.all([fetch("/api/clients"), fetch("/api/projects")]);
-      if (cRes.ok) {
-        const cData = await cRes.json();
-        setClients(cData.clients || []);
-      }
-      if (pRes.ok) {
-        const pData = await pRes.json();
-        setProjects(pData.projects || []);
-      }
+      const [cData, pData] = await Promise.all([
+        cachedFetch<{ clients: any[] }>("/api/clients", { forceRefresh }),
+        cachedFetch<{ projects: any[] }>("/api/projects", { forceRefresh }),
+      ]);
+      setClients(cData.clients || []);
+      setProjects(pData.projects || []);
     } catch (err) {
       console.error("Failed to load metadata:", err);
     }
@@ -224,7 +219,8 @@ export default function ProposalsPage() {
       handleCloseModal();
       setSuccessMsg("Draft proposal created successfully!");
       setTimeout(() => setSuccessMsg(null), 4000);
-      fetchProposals();
+      invalidateApiCache("/api/proposals");
+      fetchProposals(true);
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to create proposal");
     } finally {
@@ -251,7 +247,8 @@ export default function ProposalsPage() {
 
       setSuccessMsg(`Proposal "${data.proposal.title}" sent to client!`);
       setTimeout(() => setSuccessMsg(null), 5000);
-      fetchProposals();
+      invalidateApiCache("/api/proposals");
+      fetchProposals(true);
     } catch (err: any) {
       alert(err.message || "Failed to send proposal");
     } finally {
@@ -273,7 +270,8 @@ export default function ProposalsPage() {
       setSuccessMsg(`Proposal "${proposalToDelete.title}" deleted.`);
       setTimeout(() => setSuccessMsg(null), 4000);
       setProposalToDelete(null);
-      fetchProposals();
+      invalidateApiCache("/api/proposals");
+      fetchProposals(true);
     } catch (err: any) {
       alert(err.message || "Failed to delete proposal");
     } finally {
@@ -312,7 +310,8 @@ export default function ProposalsPage() {
       setTimeout(() => setSuccessMsg(null), 4000);
       setSelectedIds([]);
       setShowBulkDeleteModal(false);
-      fetchProposals();
+      invalidateApiCache("/api/proposals");
+      fetchProposals(true);
     } catch (err: any) {
       alert(err.message || "Failed to delete proposals");
     } finally {

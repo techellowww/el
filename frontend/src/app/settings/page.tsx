@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useAuthStore } from "@/lib/store";
+import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
 import {
   Settings as SettingsIcon,
   Building,
@@ -49,34 +50,31 @@ export default function SettingsPage() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const fetchSettings = async () => {
+  const fetchSettings = async (forceRefresh = false) => {
     try {
-      const res = await fetch("/api/settings");
-      if (res.ok) {
-        const data = await res.json();
-        setAccount(data.account);
-        setAuditLogs(data.auditLogs || []);
+      const data = await cachedFetch<{ account: any; auditLogs: any[] }>("/api/settings", { forceRefresh });
+      setAccount(data.account);
+      setAuditLogs(data.auditLogs || []);
 
-        if (data.account) {
-          setAgencyName(data.account.name || "");
-          setCurrency(data.account.currency || "USD");
-          setLogoUrl(data.account.logoUrl || "");
-          setReplyToEmail(data.account.replyToEmail || "");
+      if (data.account) {
+        setAgencyName(data.account.name || "");
+        setCurrency(data.account.currency || "USD");
+        setLogoUrl(data.account.logoUrl || "");
+        setReplyToEmail(data.account.replyToEmail || "");
 
-          setAgencyBranding({
-            name: data.account.name || "ClientHub",
-            logoUrl: data.account.logoUrl || null,
-            currency: data.account.currency || "USD",
-          });
+        setAgencyBranding({
+          name: data.account.name || "ClientHub",
+          logoUrl: data.account.logoUrl || null,
+          currency: data.account.currency || "USD",
+        });
 
-          if (data.account.emailSettings) {
-            try {
-              setEmailPreferences((prev) => ({
-                ...prev,
-                ...JSON.parse(data.account.emailSettings),
-              }));
-            } catch {}
-          }
+        if (data.account.emailSettings) {
+          try {
+            setEmailPreferences((prev) => ({
+              ...prev,
+              ...JSON.parse(data.account.emailSettings),
+            }));
+          } catch {}
         }
       }
     } catch (err) {
@@ -117,6 +115,8 @@ export default function SettingsPage() {
       setSaveSuccess("Agency branding, logo, and notification preferences saved!");
       setTimeout(() => setSaveSuccess(null), 4000);
       setAccount(data.account);
+      invalidateApiCache("/api/settings");
+      invalidateApiCache("/api/settings/branding");
 
       setAgencyBranding({
         name: data.account.name || "ClientHub",
@@ -153,6 +153,8 @@ export default function SettingsPage() {
       }
 
       setAgencyBranding({ logoUrl: null });
+      invalidateApiCache("/api/settings");
+      invalidateApiCache("/api/settings/branding");
       setSaveSuccess("Agency logo deleted successfully! The sidebar and documents have reverted to default initials badge.");
       setTimeout(() => setSaveSuccess(null), 4500);
     } catch (err: any) {

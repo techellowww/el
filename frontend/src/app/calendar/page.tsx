@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuthStore } from "@/lib/store";
 import { TimePicker12h } from "@/components/TimePicker12h";
+import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -72,13 +73,10 @@ export default function CalendarPage() {
     resetForm();
   };
 
-  const fetchEvents = async () => {
+  const fetchEvents = async (forceRefresh = false) => {
     try {
-      const res = await fetch("/api/events");
-      if (res.ok) {
-        const data = await res.json();
-        setEvents(data.events || []);
-      }
+      const data = await cachedFetch<{ events: any[] }>("/api/events", { forceRefresh });
+      setEvents(data.events || []);
     } catch (err) {
       console.error("Failed to load events:", err);
     } finally {
@@ -86,25 +84,16 @@ export default function CalendarPage() {
     }
   };
 
-  const fetchMetadata = async () => {
+  const fetchMetadata = async (forceRefresh = false) => {
     try {
-      const [cRes, pRes, eRes] = await Promise.all([
-        fetch("/api/clients"),
-        fetch("/api/projects"),
-        fetch("/api/employees"),
+      const [cData, pData, eData] = await Promise.all([
+        cachedFetch<{ clients: any[] }>("/api/clients", { forceRefresh }),
+        cachedFetch<{ projects: any[] }>("/api/projects", { forceRefresh }),
+        cachedFetch<{ employees: any[] }>("/api/employees", { forceRefresh }),
       ]);
-      if (cRes.ok) {
-        const cData = await cRes.json();
-        setClients(cData.clients || []);
-      }
-      if (pRes.ok) {
-        const pData = await pRes.json();
-        setProjects(pData.projects || []);
-      }
-      if (eRes.ok) {
-        const eData = await eRes.json();
-        setEmployees(eData.employees || []);
-      }
+      setClients(cData.clients || []);
+      setProjects(pData.projects || []);
+      setEmployees(eData.employees || []);
     } catch (err) {
       console.error("Failed to load metadata:", err);
     }
@@ -255,7 +244,8 @@ export default function CalendarPage() {
         setSuccessMsg("Event scheduled successfully!");
         setTimeout(() => setSuccessMsg(null), 4000);
       }
-      fetchEvents();
+      invalidateApiCache("/api/events");
+      fetchEvents(true);
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to schedule event");
     } finally {
@@ -268,7 +258,8 @@ export default function CalendarPage() {
     try {
       const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
       if (res.ok) {
-        fetchEvents();
+        invalidateApiCache("/api/events");
+        fetchEvents(true);
       }
     } catch (err) {
       console.error("Delete event error:", err);

@@ -77,14 +77,31 @@ export function getClosingTimeForDate(date: Date, schedule: OfficeScheduleConfig
   return schedule.closingTime || '18:00';
 }
 
+let cachedSchedule: OfficeScheduleConfig | null = null;
+let lastScheduleFetchTime = 0;
+
+export function invalidateOfficeScheduleCache(): void {
+  cachedSchedule = null;
+  lastScheduleFetchTime = 0;
+}
+
 export async function getOfficeSchedule(): Promise<OfficeScheduleConfig> {
+  const now = Date.now();
+  if (cachedSchedule && now - lastScheduleFetchTime < 30000) {
+    return cachedSchedule;
+  }
+
   const schedule = await prisma.officeSchedule.findUnique({
     where: { id: 'default-schedule' },
   });
 
-  if (!schedule) return DEFAULT_SCHEDULE;
+  if (!schedule) {
+    cachedSchedule = DEFAULT_SCHEDULE;
+    lastScheduleFetchTime = now;
+    return DEFAULT_SCHEDULE;
+  }
 
-  return {
+  cachedSchedule = {
     openingTime: schedule.openingTime,
     closingTime: schedule.closingTime,
     workingDays: schedule.workingDays,
@@ -93,6 +110,8 @@ export async function getOfficeSchedule(): Promise<OfficeScheduleConfig> {
     autoCutoffEnabled: schedule.autoCutoffEnabled,
     dayTimings: schedule.dayTimings || JSON.stringify(DEFAULT_DAY_TIMINGS),
   };
+  lastScheduleFetchTime = now;
+  return cachedSchedule;
 }
 
 /**
