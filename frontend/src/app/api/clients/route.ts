@@ -3,6 +3,11 @@ import { getSessionUser } from "@/lib/auth/session";
 import { getAccessibleClients, requireAdmin } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
 import { generateSecureToken, hashToken } from "@/lib/auth/token";
+import { getServerCache, setServerCache, invalidateServerCache } from "@/lib/server/apiServerCache";
+
+export function invalidateClientsCache(accountId: string) {
+  invalidateServerCache(`clients:${accountId}`);
+}
 
 export function extractClientChatLink(c: any): string | null {
   if (c?.chatLink) return c.chatLink;
@@ -19,12 +24,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const cacheKey = `clients:${session.accountId}:${session.role}:${session.role === "EMPLOYEE" ? session.userId : "all"}`;
+  const cached = getServerCache<any>(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
+
   const clients = await getAccessibleClients(session);
   const enrichedClients = clients.map((c: any) => ({
     ...c,
     chatLink: (c as any).chatLink || extractClientChatLink(c),
   }));
-  return NextResponse.json({ clients: enrichedClients });
+
+  const responseData = { clients: enrichedClients };
+  setServerCache(cacheKey, responseData, 15000); // 15s cache
+  return NextResponse.json(responseData);
 }
 
 // POST /api/clients (Admin only)
@@ -117,6 +131,8 @@ export async function POST(request: Request) {
         details: JSON.stringify({ name: client.name, email: client.email }),
       },
     });
+
+    invalidateClientsCache(session.accountId);
 
     return NextResponse.json({
       client: {

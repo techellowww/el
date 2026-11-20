@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { requireClientAccess, requireAdmin, NotFoundError } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
+import { invalidateClientsCache } from "../route";
+import { invalidateProjectsCache } from "../../projects/route";
 
 export async function GET(
   request: Request,
@@ -146,6 +148,8 @@ export async function PATCH(
 
       return client;
     });
+
+    invalidateClientsCache(session.accountId);
 
     if (chatLink !== undefined) {
       try {
@@ -292,6 +296,9 @@ export async function DELETE(
         },
       });
     });
+
+    invalidateClientsCache(session.accountId);
+    invalidateProjectsCache(session.accountId);
 
     return NextResponse.json({
       success: true,

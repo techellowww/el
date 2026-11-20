@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { requireAdmin } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
+import { invalidateBrandingCache } from "@/app/api/settings/branding/route";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +100,8 @@ export async function PATCH(request: Request) {
     },
   });
 
+  invalidateBrandingCache(session.accountId);
+
   await prisma.auditLog.create({
     data: {
       accountId: session.accountId,
@@ -134,6 +137,8 @@ export async function DELETE(request: Request) {
       where: { id: session.accountId },
       data: { logoUrl: null },
     });
+
+    invalidateBrandingCache(session.accountId);
 
     await prisma.auditLog.create({
       data: {

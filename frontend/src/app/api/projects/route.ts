@@ -2,13 +2,23 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { requireClientAccess, requireAdmin, NotFoundError } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
-import { getSubProjectsForProjects } from "@/lib/server/subProjectService";
+import { getServerCache, setServerCache, invalidateServerCache } from "@/lib/server/apiServerCache";
+
+export function invalidateProjectsCache(accountId: string) {
+  invalidateServerCache(`projects:${accountId}`);
+}
 
 // GET /api/projects
 export async function GET(request?: Request) {
   const session = await getSessionUser(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const cacheKey = `projects:${session.accountId}:${session.role}:${session.role === "EMPLOYEE" ? session.userId : "all"}`;
+  const cached = getServerCache<any>(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
   }
 
   const whereClause: any = {
@@ -37,13 +47,6 @@ export async function GET(request?: Request) {
             name: true,
             company: true,
             email: true,
-            notes: true,
-            assignments: {
-              select: {
-                userId: true,
-                user: { select: { id: true, name: true, email: true, role: true } },
-              },
-            },
           },
         },
         statusUpdates: {
@@ -87,7 +90,9 @@ export async function GET(request?: Request) {
     subProjects: subProjectsMap[p.id] || [],
   }));
 
-  return NextResponse.json({ projects: projectsWithSubProjects });
+  const responseData = { projects: projectsWithSubProjects };
+  setServerCache(cacheKey, responseData, 15000); // 15s cache
+  return NextResponse.json(responseData);
 }
 
 // POST /api/projects (Admin only)
@@ -154,6 +159,8 @@ export async function POST(request: Request) {
         details: JSON.stringify({ name: project.name, stage: project.stage }),
       },
     });
+
+    invalidateProjectsCache(session.accountId);
 
     return NextResponse.json({ project }, { status: 201 });
   } catch (error: any) {

@@ -3,6 +3,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { requireClientAccess, requireAdmin, NotFoundError } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
 import { getSubProjectsByProject } from "@/lib/server/subProjectService";
+import { invalidateProjectsCache } from "../route";
 
 export async function GET(
   request: Request,
@@ -127,6 +128,8 @@ export async function PATCH(
       },
     });
 
+    invalidateProjectsCache(session.accountId);
+
     return NextResponse.json({ project: updated });
   } catch (error: any) {
     if (error instanceof NotFoundError || error.statusCode === 404) {
@@ -202,6 +205,8 @@ export async function DELETE(
         },
       });
     });
+
+    invalidateProjectsCache(session.accountId);
 
     return NextResponse.json({
       success: true,

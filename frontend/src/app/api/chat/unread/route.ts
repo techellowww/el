@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/server/auth';
 import { prisma } from '@/lib/prisma';
+import { getServerCache, setServerCache, invalidateServerCache } from '@/lib/server/apiServerCache';
+
+const generalClientCache = new Map<string, any>();
 
 async function getOrCreateGeneralClient(accountId: string, email?: string) {
+  const cached = generalClientCache.get(accountId);
+  if (cached) return cached;
+
   let genClient = await prisma.client.findFirst({
     where: { accountId, company: '__INTERNAL_GENERAL_TEAM__' },
   });
@@ -16,6 +22,9 @@ async function getOrCreateGeneralClient(accountId: string, email?: string) {
       },
     });
   }
+  if (genClient) {
+    generalClientCache.set(accountId, genClient);
+  }
   return genClient;
 }
 
@@ -26,10 +35,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  try {
-    const generalClient = await getOrCreateGeneralClient(user.accountId, user.email);
+  const cacheKey = `chat-unread:${user.accountId}:${user.id}`;
+  const cachedData = getServerCache<{ totalUnreadCount: number; unreadCounts: Record<string, number> }>(cacheKey);
+  if (cachedData) {
+    return NextResponse.json({
+      success: true,
+      ...cachedData,
+    });
+  }
 
-    // Query accessible clients and projects for this user
+  try {
+    // Query accessible clients filter
     const clientWhere: any = {
       accountId: user.accountId,
       company: { not: '__INTERNAL_GENERAL_TEAM__' },
@@ -40,21 +56,42 @@ export async function GET(request: Request) {
       };
     }
 
-    const accessibleClients = await prisma.client.findMany({
-      where: clientWhere,
-      select: {
-        id: true,
-        name: true,
-        projects: {
-          select: { id: true, name: true },
+    // Execute all required queries in a single concurrent Promise.all batch
+    const [generalClient, accessibleClients, userReads, candidateMessages] = await Promise.all([
+      getOrCreateGeneralClient(user.accountId, user.email),
+      prisma.client.findMany({
+        where: clientWhere,
+        select: {
+          id: true,
+          name: true,
+          projects: {
+            select: { id: true, name: true },
+          },
         },
-      },
-    });
+      }),
+      prisma.messageRead.findMany({
+        where: { accountId: user.accountId, userId: user.id },
+      }),
+      prisma.message.findMany({
+        where: {
+          accountId: user.accountId,
+          isDeleted: false,
+          OR: [
+            { senderUserId: { not: user.id } },
+            { senderUserId: null },
+          ],
+        },
+        select: {
+          id: true,
+          clientId: true,
+          projectId: true,
+          isInternalNote: true,
+          createdAt: true,
+        },
+      }),
+    ]);
 
-    // Fetch user's message read receipts
-    const userReads = await prisma.messageRead.findMany({
-      where: { accountId: user.accountId, userId: user.id },
-    });
+    // Build read timestamps lookup
     const readMap = new Map<string, Date>();
     userReads.forEach((r: any) => {
       readMap.set(r.clientId, r.lastReadAt);
@@ -62,67 +99,54 @@ export async function GET(request: Request) {
 
     const unreadCounts: Record<string, number> = {};
 
-    // 1. General channel unread count
+    // 1. General channel unread count (calculated in-memory)
     const generalLastRead = readMap.get(generalClient.id);
-    const generalUnread = await prisma.message.count({
-      where: {
-        accountId: user.accountId,
-        clientId: generalClient.id,
-        projectId: null,
-        isInternalNote: true,
-        isDeleted: false,
-        OR: [
-          { senderUserId: { not: user.id } },
-          { senderUserId: null },
-        ],
-        ...(generalLastRead ? { createdAt: { gt: generalLastRead } } : {}),
-      },
-    });
+    let generalUnread = 0;
+    for (const m of candidateMessages) {
+      if (m.clientId === generalClient.id && !m.projectId && m.isInternalNote) {
+        if (!generalLastRead || m.createdAt > generalLastRead) {
+          generalUnread++;
+        }
+      }
+    }
     unreadCounts['general'] = generalUnread;
 
-    // 2. Client & Project channels
+    // 2. Client & Project channels (calculated in-memory without N+1 SQL queries)
     for (const client of accessibleClients) {
       const clientLastRead = readMap.get(client.id);
-      const clientUnread = await prisma.message.count({
-        where: {
-          accountId: user.accountId,
-          clientId: client.id,
-          projectId: null,
-          isInternalNote: false,
-          isDeleted: false,
-          OR: [
-            { senderUserId: { not: user.id } },
-            { senderUserId: null },
-          ],
-          ...(clientLastRead ? { createdAt: { gt: clientLastRead } } : {}),
-        },
-      });
+      let clientUnread = 0;
+      for (const m of candidateMessages) {
+        if (m.clientId === client.id && !m.projectId && !m.isInternalNote) {
+          if (!clientLastRead || m.createdAt > clientLastRead) {
+            clientUnread++;
+          }
+        }
+      }
       unreadCounts[client.id] = clientUnread;
 
       for (const proj of client.projects) {
         const projLastRead = readMap.get(proj.id) || clientLastRead;
-        const projUnread = await prisma.message.count({
-          where: {
-            accountId: user.accountId,
-            projectId: proj.id,
-            isDeleted: false,
-            OR: [
-              { senderUserId: { not: user.id } },
-              { senderUserId: null },
-            ],
-            ...(projLastRead ? { createdAt: { gt: projLastRead } } : {}),
-          },
-        });
+        let projUnread = 0;
+        for (const m of candidateMessages) {
+          if (m.projectId === proj.id) {
+            if (!projLastRead || m.createdAt > projLastRead) {
+              projUnread++;
+            }
+          }
+        }
         unreadCounts[proj.id] = projUnread;
       }
     }
 
     const totalUnreadCount = Object.values(unreadCounts).reduce((acc, c) => acc + (c || 0), 0);
+    const result = { totalUnreadCount, unreadCounts };
+
+    // Cache unread calculation for 10 seconds per user
+    setServerCache(cacheKey, result, 10000);
 
     return NextResponse.json({
       success: true,
-      totalUnreadCount,
-      unreadCounts,
+      ...result,
     });
   } catch (err: any) {
     console.error('Failed to get chat unread counts:', err);
@@ -144,6 +168,9 @@ export async function POST(request: Request) {
     if (!conversationId) {
       return NextResponse.json({ error: 'conversationId is required' }, { status: 400 });
     }
+
+    // Invalidate cached unread counts for this user immediately
+    invalidateServerCache(`chat-unread:${user.accountId}:${user.id}`);
 
     let targetClientId: string | null = null;
     if (conversationId === 'general') {
