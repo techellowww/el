@@ -1329,7 +1329,7 @@ export default function ScreenshotModulePage() {
           }}
         >
           <div
-            className="bg-white border border-border rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl overflow-hidden flex flex-col"
+            className="bg-white border border-border rounded-2xl max-w-lg w-full p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl overflow-y-auto max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}

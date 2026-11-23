@@ -682,7 +682,7 @@ export default function InvoicesPage() {
           }}
         >
           <div
-            className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl space-y-5 my-8"
+            className="bg-white rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-xl space-y-5 my-8 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border pb-3">

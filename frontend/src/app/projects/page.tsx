@@ -1143,7 +1143,7 @@ export default function ProjectsPage() {
           }}
         >
           <div
-            className="w-full max-w-md bg-white border border-border rounded-card p-6 sm:p-8 shadow-xl space-y-6"
+            className="w-full max-w-md bg-white border border-border rounded-card p-4 sm:p-6 shadow-xl space-y-5 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -1248,7 +1248,7 @@ export default function ProjectsPage() {
           }}
         >
           <div
-            className="w-full max-w-md bg-white border border-border rounded-card p-6 shadow-xl space-y-5"
+            className="w-full max-w-md bg-white border border-border rounded-card p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-5 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-border">

@@ -406,7 +406,7 @@ export default function TimeSheetPage() {
                 data-testid="timesheet-timer-project-select"
                 value={selectedProjectId}
                 onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary max-w-xs sm:max-w-sm truncate"
+                className="w-full sm:w-auto px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary max-w-full sm:max-w-sm truncate"
               >
                 {projects.map((p) => {
                   const hasSubs = Array.isArray(p.subProjects) && p.subProjects.length > 0;
@@ -438,7 +438,7 @@ export default function TimeSheetPage() {
                 placeholder="What are you working on?"
                 value={timerDesc}
                 onChange={(e) => setTimerDesc(e.target.value)}
-                className="px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary min-w-[220px]"
+                className="w-full sm:w-auto sm:min-w-[220px] px-3.5 py-2.5 bg-white border border-border rounded-xl body-text text-text-primary placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               />
 
               <button

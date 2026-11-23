@@ -224,7 +224,7 @@ export default function ClientProposalPage({
 
           {/* Proposal HTML Narrative & Scope Body */}
           <div
-            className="prose prose-slate max-w-none text-sm text-slate-800 leading-relaxed border-b border-slate-200 pb-8 space-y-4"
+            className="prose prose-slate max-w-none text-sm text-slate-800 leading-relaxed border-b border-slate-200 pb-8 space-y-4 overflow-x-auto break-words"
             dangerouslySetInnerHTML={{ __html: latestVersion?.contentHtml || "<p>No content available.</p>" }}
           />
 

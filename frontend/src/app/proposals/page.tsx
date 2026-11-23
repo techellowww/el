@@ -371,26 +371,26 @@ export default function ProposalsPage() {
       )}
 
       {/* Metrics Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-white border border-border shadow-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border shadow-xs">
           <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">Total Proposals</span>
           <div className="text-2xl font-bold text-text-primary mt-1">{totalProposals}</div>
           <span className="text-xs text-text-secondary mt-1 block">Created to date</span>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white border border-border shadow-xs">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border shadow-xs">
           <span className="text-xs font-semibold uppercase tracking-wider text-green-600">Signed & Accepted</span>
           <div className="text-2xl font-bold text-green-600 mt-1">{signedCount}</div>
           <span className="text-xs text-text-secondary mt-1 block">Executed contracts</span>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white border border-border shadow-xs">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border shadow-xs">
           <span className="text-xs font-semibold uppercase tracking-wider text-blue-600">Awaiting Reply</span>
           <div className="text-2xl font-bold text-blue-600 mt-1">{sentCount}</div>
           <span className="text-xs text-text-secondary mt-1 block">Sent to clients</span>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white border border-border shadow-xs">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border shadow-xs">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Drafts</span>
           <div className="text-2xl font-bold text-slate-700 mt-1">{draftCount}</div>
           <span className="text-xs text-text-secondary mt-1 block">Work in progress</span>
@@ -580,7 +580,7 @@ export default function ProposalsPage() {
           }}
         >
           <div
-            className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-xl space-y-5 my-8 max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-2xl max-w-3xl w-full p-4 sm:p-6 shadow-xl space-y-5 my-8 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border pb-3">

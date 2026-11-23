@@ -681,7 +681,15 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
 
   // Redirect non-admin / employee users away from admin-only modules
   useEffect(() => {
-    if (user && !isAdmin && (pathname === '/proposals' || pathname === '/invoices' || pathname === '/settings')) {
+    if (
+      user &&
+      !isAdmin &&
+      (pathname === '/proposals' ||
+        pathname === '/invoices' ||
+        pathname === '/settings' ||
+        pathname === '/mail' ||
+        pathname === '/screenshot')
+    ) {
       router.replace('/dashboard');
     }
   }, [user, isAdmin, pathname, router]);

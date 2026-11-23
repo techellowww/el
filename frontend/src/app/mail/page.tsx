@@ -658,7 +658,7 @@ export default function MailModulePage() {
                     Choose how often reports should be automatically generated and dispatched.
                   </p>
 
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                     {(['DAILY', 'WEEKLY', 'MONTHLY'] as const).map((type) => {
                       const isSelected = scheduleType === type;
                       return (
