@@ -11,16 +11,11 @@ import {
   Ban,
   Copy,
   ExternalLink,
-  DollarSign,
-  Calendar,
-  Building,
-  Clock,
   Trash2,
   X,
   Loader2,
   Check,
   AlertCircle,
-  FileSpreadsheet,
 } from "lucide-react";
 import { ConfirmModal } from "@/components/MiniModal";
 
@@ -58,7 +53,6 @@ export default function InvoicesPage() {
 
   // Time Entries for selected project (to pull unbilled time)
   const [unbilledEntries, setUnbilledEntries] = useState<any[]>([]);
-  const [loadingEntries, setLoadingEntries] = useState(false);
 
   // Action Loading
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -119,15 +113,13 @@ export default function InvoicesPage() {
       setUnbilledEntries([]);
       return;
     }
-    setLoadingEntries(true);
     fetch(`/api/time?projectId=${selectedProjectId}&allDates=true`)
       .then((r) => r.json())
       .then((data) => {
         const entries = (data.entries || []).filter((e: any) => !e.isLocked && !e.invoiceId);
         setUnbilledEntries(entries);
       })
-      .catch(() => setUnbilledEntries([]))
-      .finally(() => setLoadingEntries(false));
+      .catch(() => setUnbilledEntries([]));
   }, [selectedProjectId]);
 
   const handlePullTimeEntries = () => {

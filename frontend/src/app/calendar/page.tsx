@@ -8,7 +8,6 @@ import {
   Calendar as CalendarIcon,
   Plus,
   Clock,
-  MapPin,
   Users,
   Video,
   CheckCircle2,
@@ -16,7 +15,6 @@ import {
   X,
   Loader2,
   AlertCircle,
-  Building,
   FolderKanban,
 } from "lucide-react";
 

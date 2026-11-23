@@ -4,16 +4,11 @@ import React, { useEffect, useState, useRef } from "react";
 import { useAuthStore } from "@/lib/store";
 import { cachedFetch, invalidateApiCache, getCachedData } from "@/lib/apiCache";
 import {
-  Settings as SettingsIcon,
   Building,
-  Image,
-  Mail,
-  Shield,
   CheckCircle2,
   AlertCircle,
   Loader2,
   History,
-  Lock,
   Trash2,
   Upload,
   X,
@@ -25,7 +20,6 @@ export default function SettingsPage() {
   const isAdmin = user?.role === "ADMIN";
 
   const cachedData = getCachedData<{ account: any; auditLogs: any[] }>("/api/settings");
-  const [loading, setLoading] = useState(() => !cachedData);
   const [account, setAccount] = useState<any | null>(() => cachedData?.account || null);
   const [auditLogs, setAuditLogs] = useState<any[]>(() => cachedData?.auditLogs || []);
 
@@ -80,8 +74,6 @@ export default function SettingsPage() {
       }
     } catch (err) {
       console.error("Failed to load settings:", err);
-    } finally {
-      setLoading(false);
     }
   };
 

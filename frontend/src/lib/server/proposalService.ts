@@ -2,7 +2,6 @@ import crypto from "crypto";
 import { prisma } from "../prisma";
 import { generateSecureToken, hashToken } from "../auth/token";
 import { queueNotification } from "./notificationService";
-import { logAuditEvent } from "./audit";
 
 export interface ProposalPriceItem {
   name: string;

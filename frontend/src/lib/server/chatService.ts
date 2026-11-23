@@ -1,6 +1,5 @@
 import { prisma } from "../prisma";
 import { getClientByPortalToken } from "../auth/access";
-import { queueNotification } from "./notificationService";
 
 // Rate limiting in-memory store: Map<identifier, timestamp[]>
 const postRateLimitMap = new Map<string, number[]>();

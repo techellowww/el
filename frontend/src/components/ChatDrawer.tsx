@@ -14,11 +14,7 @@ import {
   Edit2,
   Trash2,
   Circle,
-  Clock,
-  Sparkles,
-  ChevronDown,
   RefreshCw,
-  Bell,
 } from 'lucide-react';
 
 interface ChatUser {

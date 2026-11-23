@@ -4,21 +4,14 @@ import React, { useEffect, useState, use } from "react";
 import {
   FolderKanban,
   ExternalLink,
-  CheckCircle2,
   Clock,
-  Sparkles,
   Building,
   ArrowRight,
-  ShieldCheck,
-  Calendar,
   FileText,
   CreditCard,
   MessageSquare,
   Send,
   Loader2,
-  Paperclip,
-  X,
-  FileCheck,
 } from "lucide-react";
 import { getStageBadge } from "@/lib/utils";
 

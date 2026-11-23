@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth/session';
-import { requireAdmin, requireClientAccess, NotFoundError } from '@/lib/auth/access';
+import { requireAdmin, requireClientAccess } from '@/lib/auth/access';
 import { prisma } from '@/lib/prisma';
 import {
   getSubProjectsByProject,

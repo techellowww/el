@@ -12,7 +12,6 @@ import {
   stopScreenStream,
   isScreenStreamActive,
   getActiveScreenStream,
-  getActiveVideoElement,
   ensureVideoPlaying,
   onScreenStreamChange,
 } from '@/lib/screenshotCapture';
@@ -22,34 +21,22 @@ import {
   Clock,
   LayoutDashboard,
   FolderKanban,
-  FileSpreadsheet,
-  CheckSquare,
   Users,
   UserCheck,
-  ShieldAlert,
   LogOut,
   Menu,
   X,
-  Play,
   Square,
-  AlertCircle,
   AlertTriangle,
   Camera,
   Mail,
   History,
-  Building2,
-  ChevronRight,
   Sparkles,
-  Layers,
   Calendar,
-  Activity,
-  ArrowUpRight,
   Moon,
-  MessageSquare,
   CreditCard,
   Settings,
   Pencil,
-  User,
 } from 'lucide-react';
 
 
@@ -768,8 +755,6 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       ],
     },
   ];
-
-  const navItems = navSections.flatMap((section) => section.items);
 
   return (
     <div className="min-h-screen bg-app-background text-text-primary flex flex-col font-sans antialiased selection:bg-primary selection:text-white">

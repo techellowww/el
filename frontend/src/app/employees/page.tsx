@@ -1,27 +1,19 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useAuthStore, formatSecondsToTimer } from "@/lib/store";
+import { useAuthStore } from "@/lib/store";
 import { getInitials } from "@/lib/utils";
 import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
 import {
-  Users,
   Plus,
   Mail,
   UserCheck,
-  Shield,
-  ShieldAlert,
   Clock,
   Building,
-  Check,
   Search,
   Edit2,
   Trash2,
   AlertCircle,
-  Briefcase,
-  Play,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 
 interface Employee {

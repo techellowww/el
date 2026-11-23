@@ -5,23 +5,15 @@ import { useAuthStore } from "@/lib/store";
 import { cachedFetch, invalidateApiCache, getCachedData } from "@/lib/apiCache";
 import {
   FileText,
-  Plus,
   Sparkles,
   Send,
   CheckCircle2,
-  XCircle,
   Copy,
   ExternalLink,
-  Calendar,
-  Building,
   Check,
   X,
   Loader2,
   AlertCircle,
-  Clock,
-  History,
-  ShieldCheck,
-  DollarSign,
   Trash2,
 } from "lucide-react";
 import { ConfirmModal } from "@/components/MiniModal";

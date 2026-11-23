@@ -1,27 +1,23 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { requestScreenStream, isScreenStreamActive, stopScreenStream } from '@/lib/screenshotCapture';
+import { requestScreenStream, isScreenStreamActive } from '@/lib/screenshotCapture';
 import { useAuthStore, useTimerStore, formatSecondsToTimer, checkIsAfterOfficeHours } from "@/lib/store";
 import { formatLocalDate, getInitials } from "@/lib/utils";
-import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
+import { cachedFetch } from "@/lib/apiCache";
 import {
   Clock,
   Play,
   Square,
-  Plus,
   Calendar,
   History,
   AlertCircle,
-  Building,
   Moon,
   Filter,
   Users,
   User as UserIcon,
   RotateCcw,
   Briefcase,
-  Layers,
-  ChevronDown,
 } from "lucide-react";
 
 

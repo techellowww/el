@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuthStore, useTimerStore } from '@/lib/store';
 import { formatLocalDate } from '@/lib/utils';
 import { requestScreenStream, isScreenStreamActive, captureAndUploadActivityScreenshot } from '@/lib/screenshotCapture';
-import { ConfirmModal } from '@/components/MiniModal';
 import { cachedFetch, invalidateApiCache } from '@/lib/apiCache';
 import JSZip from 'jszip';
 import {
@@ -15,28 +14,16 @@ import {
   CheckCircle2,
   AlertCircle,
   Trash2,
-  Calendar,
-  Filter,
   X,
   Download,
   ZoomIn,
   RefreshCw,
-  User as UserIcon,
   ShieldCheck,
-  Check,
-  Sparkles,
-  Info,
-  Timer,
-  PlayCircle,
-  Square,
   AlertTriangle,
   Save,
   Loader2,
   HardDrive,
   FolderDown,
-  FolderCheck,
-  Archive,
-  FolderSync,
 } from 'lucide-react';
 
 interface ScreenshotRecord {
@@ -112,7 +99,6 @@ export default function ScreenshotModulePage() {
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [isCapturingNow, setIsCapturingNow] = useState(false);
   const [isDeletingSelected, setIsDeletingSelected] = useState(false);
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -500,7 +486,6 @@ export default function ScreenshotModulePage() {
   // 5.3 Batch Delete Screenshots (Admin Only)
   const handleDeleteSelected = async () => {
     if (!isAdmin || selectedIds.size === 0) return;
-    setConfirmDeleteOpen(false);
     setIsDeletingSelected(true);
     setMessage(null);
 

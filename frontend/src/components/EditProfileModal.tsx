@@ -1,17 +1,13 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { useAuthStore, UserSession } from '@/lib/store';
+import { useAuthStore } from '@/lib/store';
 import { getInitials } from '@/lib/utils';
 import {
   X,
   Upload,
   Camera,
   Trash2,
-  User,
-  Briefcase,
-  Phone,
-  Clock,
   Mail,
   Lock,
   Check,
@@ -19,8 +15,6 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
-  Building,
-  Sparkles,
 } from 'lucide-react';
 
 interface EditProfileModalProps {

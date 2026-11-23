@@ -13,8 +13,6 @@ export interface SubProject {
   updatedAt: string;
 }
 
-let tableInitialized = true;
-
 /**
  * Initializes the ch_sub_projects table and indexes if they do not exist.
  * Uses raw PostgreSQL DDL so it never conflicts with Prisma code generation.

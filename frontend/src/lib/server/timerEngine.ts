@@ -245,16 +245,14 @@ export async function startProjectTimer({
   }
 
   // Target duration: Overtime sessions run until manually stopped (no forced cutoff)
-  let targetDurationSeconds: number | null = null;
   let sessionNotes = notes || '';
 
   if (isOvertimeSession) {
     if (!/\[Overtime\]/i.test(sessionNotes)) {
       sessionNotes = sessionNotes ? `[Overtime] ${sessionNotes}` : '[Overtime]';
     }
-    // Overtime runs until manually stopped; targetDurationSeconds remains null
+    // Overtime runs until manually stopped
   } else if (classificationResult.isOutsideHours && targetDurationMinutes && targetDurationMinutes > 0) {
-    targetDurationSeconds = Math.round(targetDurationMinutes * 60);
     sessionNotes = sessionNotes
       ? `${sessionNotes} [Planned limit: ${targetDurationMinutes}m]`
       : `[Planned limit: ${targetDurationMinutes}m]`;

@@ -1,16 +1,7 @@
-import React from "react";
 import { notFound } from "next/navigation";
 import { getInvoiceByToken } from "@/lib/server/invoiceService";
 import { PrintButton } from "@/components/PrintButton";
-import {
-  FileText,
-  Building,
-  Calendar,
-  CheckCircle2,
-  Clock,
-  ShieldCheck,
-  CreditCard,
-} from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 export default async function PublicInvoicePage({
   params,

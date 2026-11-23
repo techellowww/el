@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { requestScreenStream, isScreenStreamActive, stopScreenStream } from '@/lib/screenshotCapture';
+import { requestScreenStream, isScreenStreamActive } from '@/lib/screenshotCapture';
 import { useAuthStore, useTimerStore, formatSecondsToTimer, checkIsAfterOfficeHours } from "@/lib/store";
 import { getStageBadge } from "@/lib/utils";
 import { cachedFetch, getCachedData } from "@/lib/apiCache";
@@ -12,14 +12,9 @@ import {
   Clock,
   Play,
   Square,
-  ArrowRight,
   ExternalLink,
-  ShieldAlert,
-  CheckCircle2,
-  Calendar,
   Building,
   Sparkles,
-  TrendingUp,
   AlertCircle,
   Loader2,
   X,

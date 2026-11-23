@@ -17,8 +17,6 @@ import {
   X,
   Loader2,
   FolderTree,
-  Layers,
-  CheckCircle2,
   MessageSquare,
 } from "lucide-react";
 
