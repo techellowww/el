@@ -1,6 +1,6 @@
 import { chromium } from '@playwright/test';
 
-const BASE_URL = 'https://el-ka5y.vercel.app';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 async function runTestSuite() {
   console.log(`\n============================================================`);
