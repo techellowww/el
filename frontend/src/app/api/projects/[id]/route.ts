@@ -3,7 +3,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { requireClientAccess, requireAdmin, NotFoundError } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
 import { getSubProjectsByProject } from "@/lib/server/subProjectService";
-import { invalidateProjectsCache } from "../route";
+import { invalidateProjectsCache } from "@/app/api/projects/route";
 
 export async function GET(
   request: Request,

@@ -3,6 +3,11 @@ import { getSessionUser } from "@/lib/auth/session";
 import { requireAdmin } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
 import { createDraftProposal, generateAiProposalDraft, deleteProposals } from "@/lib/server/proposalService";
+import { getServerCache, setServerCache, invalidateServerCache } from "@/lib/server/apiServerCache";
+
+export function invalidateProposalsCache(accountId: string) {
+  invalidateServerCache(`proposals:${accountId}`);
+}
 
 // GET /api/proposals (Admin only)
 export async function GET(request: Request) {
@@ -20,6 +25,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const clientId = searchParams.get("clientId");
   const status = searchParams.get("status");
+
+  const cacheKey = `proposals:${session.accountId}:${clientId || 'all'}:${status || 'all'}`;
+  const cached = getServerCache<any>(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
+  }
 
   const whereClause: any = {
     accountId: session.accountId,
@@ -42,7 +53,9 @@ export async function GET(request: Request) {
     },
   });
 
-  return NextResponse.json({ proposals });
+  const responseData = { proposals };
+  setServerCache(cacheKey, responseData, 30000);
+  return NextResponse.json(responseData);
 }
 
 // POST /api/proposals (Admin only)
@@ -106,6 +119,8 @@ export async function POST(request: Request) {
       contentHtml,
     });
 
+    invalidateProposalsCache(session.accountId);
+
     return NextResponse.json({ proposal });
   } catch (err: any) {
     console.error("Create proposal error:", err);
@@ -138,6 +153,7 @@ export async function DELETE(request: Request) {
     }
 
     const result = await deleteProposals(ids, session.accountId, session.userId);
+    invalidateProposalsCache(session.accountId);
     return NextResponse.json(result);
   } catch (err: any) {
     console.error("Bulk delete proposals error:", err);

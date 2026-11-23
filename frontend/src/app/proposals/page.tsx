@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuthStore } from "@/lib/store";
-import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
+import { cachedFetch, invalidateApiCache, getCachedData } from "@/lib/apiCache";
 import {
   FileText,
   Plus,
@@ -36,10 +36,11 @@ export default function ProposalsPage() {
   const { user } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
 
-  const [proposals, setProposals] = useState<any[]>([]);
-  const [clients, setClients] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedProposals = getCachedData<{ proposals: any[] }>("/api/proposals")?.proposals;
+  const [proposals, setProposals] = useState<any[]>(() => cachedProposals || []);
+  const [clients, setClients] = useState<any[]>(() => getCachedData<{ clients: any[] }>("/api/clients")?.clients || []);
+  const [projects, setProjects] = useState<any[]>(() => getCachedData<{ projects: any[] }>("/api/projects")?.projects || []);
+  const [loading, setLoading] = useState(() => !cachedProposals);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // New Proposal Modal

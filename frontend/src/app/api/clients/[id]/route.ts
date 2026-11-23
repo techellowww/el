@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { requireClientAccess, requireAdmin, NotFoundError } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
-import { invalidateClientsCache } from "../route";
-import { invalidateProjectsCache } from "../../projects/route";
+import { invalidateClientsCache } from "@/app/api/clients/route";
 
 export async function GET(
   request: Request,
@@ -41,6 +40,8 @@ export async function GET(
       const match = fullClient.notes.match(/(?:\[Chat Link\]|Chat Link|chatLink):\s*(https?:\/\/\S+|\S+)/i);
       if (match) chatLink = match[1].trim();
     }
+
+    invalidateClientsCache(session.accountId);
 
     return NextResponse.json({
       client: {
@@ -149,8 +150,6 @@ export async function PATCH(
       return client;
     });
 
-    invalidateClientsCache(session.accountId);
-
     if (chatLink !== undefined) {
       try {
         await prisma.$executeRawUnsafe(
@@ -160,6 +159,8 @@ export async function PATCH(
         );
       } catch {}
     }
+
+    invalidateClientsCache(session.accountId);
 
     return NextResponse.json({
       client: {
@@ -298,7 +299,6 @@ export async function DELETE(
     });
 
     invalidateClientsCache(session.accountId);
-    invalidateProjectsCache(session.accountId);
 
     return NextResponse.json({
       success: true,

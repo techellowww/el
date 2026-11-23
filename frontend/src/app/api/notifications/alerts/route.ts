@@ -5,7 +5,6 @@ import {
   retryFailedNotifications,
   dismissFailedNotifications,
 } from "@/lib/server/notificationService";
-import { getServerCache, setServerCache, invalidateServerCache } from "@/lib/server/apiServerCache";
 
 export async function GET(request: Request) {
   const session = await getSessionUser(request);
@@ -13,17 +12,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const cacheKey = `alerts:${session.accountId}`;
-  const cached = getServerCache<any>(cacheKey);
-  if (cached) {
-    return NextResponse.json(cached);
-  }
-
   try {
     const alerts = await getFailedNotificationAlerts(session.accountId);
-    const result = { alerts };
-    setServerCache(cacheKey, result, 15000); // 15s cache
-    return NextResponse.json(result);
+    return NextResponse.json({ alerts });
   } catch (err: any) {
     return NextResponse.json({ alerts: [] });
   }
@@ -34,8 +25,6 @@ export async function POST(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  invalidateServerCache(`alerts:${session.accountId}`);
 
   try {
     const body = await request.json().catch(() => ({}));
@@ -63,8 +52,6 @@ export async function DELETE(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  invalidateServerCache(`alerts:${session.accountId}`);
 
   try {
     const result = await dismissFailedNotifications(session.accountId);

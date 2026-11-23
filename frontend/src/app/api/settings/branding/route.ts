@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
-import { getServerCache, setServerCache, invalidateServerCache } from "@/lib/server/apiServerCache";
+import { getServerCache, setServerCache } from "@/lib/server/apiServerCache";
 
 export const dynamic = 'force-dynamic';
-
-export function invalidateBrandingCache(accountId: string) {
-  invalidateServerCache(`branding:${accountId}`);
-}
 
 // GET /api/settings/branding (Accessible by all authenticated users: Admin and Employee)
 export async function GET(request: Request) {
@@ -20,19 +16,6 @@ export async function GET(request: Request) {
   const cached = getServerCache<any>(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
-  }
-
-  // Fast path: if session already carries account branding details
-  const sessionAccount = (session as any).account;
-  if (sessionAccount?.name && sessionAccount?.id === session.accountId) {
-    const branding = {
-      id: sessionAccount.id,
-      name: sessionAccount.name || "ClientHub",
-      logoUrl: sessionAccount.logoUrl || null,
-      currency: sessionAccount.currency || "USD",
-    };
-    setServerCache(cacheKey, branding, 60000); // 60s cache
-    return NextResponse.json(branding);
   }
 
   const account = await prisma.account.findUnique({
@@ -55,7 +38,6 @@ export async function GET(request: Request) {
     logoUrl: account.logoUrl || null,
     currency: account.currency || "USD",
   };
-
   setServerCache(cacheKey, branding, 60000);
   return NextResponse.json(branding);
 }

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuthStore } from "@/lib/store";
-import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
+import { cachedFetch, invalidateApiCache, getCachedData } from "@/lib/apiCache";
 import {
   FileText,
   Plus,
@@ -35,10 +35,11 @@ export default function InvoicesPage() {
   const { user } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
 
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [clients, setClients] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedInvoices = getCachedData<{ invoices: any[] }>("/api/invoices")?.invoices;
+  const [invoices, setInvoices] = useState<any[]>(() => cachedInvoices || []);
+  const [clients, setClients] = useState<any[]>(() => getCachedData<{ clients: any[] }>("/api/clients")?.clients || []);
+  const [projects, setProjects] = useState<any[]>(() => getCachedData<{ projects: any[] }>("/api/projects")?.projects || []);
+  const [loading, setLoading] = useState(() => !cachedInvoices);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [clientFilter, setClientFilter] = useState("ALL");
   const [copiedId, setCopiedId] = useState<string | null>(null);

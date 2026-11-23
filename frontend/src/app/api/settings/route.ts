@@ -2,10 +2,15 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { requireAdmin } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
-import { invalidateBrandingCache } from "@/app/api/settings/branding/route";
+import { getServerCache, setServerCache, invalidateServerCache } from "@/lib/server/apiServerCache";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
+
+export function invalidateSettingsCache(accountId: string) {
+  invalidateServerCache(`settings:${accountId}`);
+  invalidateServerCache(`branding:${accountId}`);
+}
 
 // GET /api/settings (Admin only)
 export async function GET(request?: Request) {
@@ -18,6 +23,12 @@ export async function GET(request?: Request) {
     requireAdmin(session);
   } catch {
     return NextResponse.json({ error: "Forbidden: Admin only" }, { status: 403 });
+  }
+
+  const cacheKey = `settings:${session.accountId}`;
+  const cached = getServerCache<any>(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached);
   }
 
   const [account, users, auditLogs, notificationStats] = await Promise.all([
@@ -56,12 +67,15 @@ export async function GET(request?: Request) {
     }),
   ]);
 
-  return NextResponse.json({
+  const responseData = {
     account,
     users,
     auditLogs,
     notificationStats,
-  });
+  };
+  setServerCache(cacheKey, responseData, 60000);
+
+  return NextResponse.json(responseData);
 }
 
 // PATCH /api/settings (Branding update)
@@ -100,8 +114,6 @@ export async function PATCH(request: Request) {
     },
   });
 
-  invalidateBrandingCache(session.accountId);
-
   await prisma.auditLog.create({
     data: {
       accountId: session.accountId,
@@ -112,6 +124,8 @@ export async function PATCH(request: Request) {
       details: JSON.stringify({ name, currency, logoUpdated: logoUrl !== undefined }),
     },
   });
+
+  invalidateSettingsCache(session.accountId);
 
   return NextResponse.json({ account: updatedAccount });
 }
@@ -138,8 +152,6 @@ export async function DELETE(request: Request) {
       data: { logoUrl: null },
     });
 
-    invalidateBrandingCache(session.accountId);
-
     await prisma.auditLog.create({
       data: {
         accountId: session.accountId,
@@ -150,6 +162,8 @@ export async function DELETE(request: Request) {
         details: JSON.stringify({ field: "logoUrl", message: "Agency logo deleted" }),
       },
     });
+
+    invalidateSettingsCache(session.accountId);
 
     return NextResponse.json({
       success: true,

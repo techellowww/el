@@ -5,7 +5,7 @@ import Link from "next/link";
 import { requestScreenStream, isScreenStreamActive, stopScreenStream } from '@/lib/screenshotCapture';
 import { useAuthStore, useTimerStore, formatSecondsToTimer, checkIsAfterOfficeHours } from "@/lib/store";
 import { getStageBadge } from "@/lib/utils";
-import { cachedFetch } from "@/lib/apiCache";
+import { cachedFetch, getCachedData } from "@/lib/apiCache";
 import {
   FolderKanban,
   Users,
@@ -48,15 +48,16 @@ export default function DashboardPage() {
   const { user } = useAuthStore();
   const { activeTimer, schedule, startTimer, stopTimer, error: timerStoreError } = useTimerStore();
 
-  const [clients, setClients] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [recentEntries, setRecentEntries] = useState<any[]>([]);
+  const cachedProjects = getCachedData<{ projects: any[] }>("/api/projects")?.projects;
+  const [clients, setClients] = useState<any[]>(() => getCachedData<{ clients: any[] }>("/api/clients")?.clients || []);
+  const [projects, setProjects] = useState<any[]>(() => cachedProjects || []);
+  const [recentEntries, setRecentEntries] = useState<any[]>(() => getCachedData<{ entries: any[] }>("/api/time")?.entries || []);
   const [unpaidInvoices, setUnpaidInvoices] = useState<any[]>([]);
-  const [pendingProposals, setPendingProposals] = useState<any[]>([]);
+  const [pendingProposals, setPendingProposals] = useState<any[]>(() => getCachedData<{ proposals: any[] }>("/api/proposals")?.proposals || []);
   const [failedAlerts, setFailedAlerts] = useState<any[]>([]);
   const [isRetryingAlerts, setIsRetryingAlerts] = useState<boolean>(false);
   const [isDismissingAlerts, setIsDismissingAlerts] = useState<boolean>(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !cachedProjects);
 
   // Quick timer start states
   const [quickProjectId, setQuickProjectId] = useState<string>("");

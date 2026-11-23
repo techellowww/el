@@ -21,21 +21,11 @@ const prismaClientDir = getPrismaClientDir();
 (globalThis as any).__filename = path.join(prismaClientDir, 'index.js');
 
 // Support standard database env aliases (preferring pooled connections on Vercel / serverless)
-const rawDbUrl =
+const dbUrl =
   process.env.POSTGRES_PRISMA_URL ||
   process.env.VERCEL_POSTGRES_PRISMA_URL ||
   process.env.DATABASE_URL ||
   process.env.POSTGRES_URL;
-
-// Optimize connection pool limits for serverless lambdas to prevent remote PostgreSQL pool exhaustion
-function configurePrismaUrl(url?: string): string | undefined {
-  if (!url) return undefined;
-  if (url.includes('connection_limit=')) return url;
-  const separator = url.includes('?') ? '&' : '?';
-  return `${url}${separator}connection_limit=3&pool_timeout=15`;
-}
-
-const dbUrl = configurePrismaUrl(rawDbUrl);
 
 if (!process.env.DATABASE_URL && dbUrl) {
   process.env.DATABASE_URL = dbUrl;

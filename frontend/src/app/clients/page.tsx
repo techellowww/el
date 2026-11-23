@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuthStore, useChatStore } from "@/lib/store";
-import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
+import { cachedFetch, invalidateApiCache, getCachedData } from "@/lib/apiCache";
 import {
   Users,
   Plus,
@@ -23,9 +23,11 @@ import {
 
 export default function ClientsPage() {
   const { user } = useAuthStore();
-  const [clients, setClients] = useState<any[]>([]);
-  const [employees, setEmployees] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedClients = getCachedData<{ clients: any[] }>("/api/clients")?.clients;
+  const cachedEmployees = getCachedData<{ employees: any[] }>("/api/employees")?.employees;
+  const [clients, setClients] = useState<any[]>(() => cachedClients || []);
+  const [employees, setEmployees] = useState<any[]>(() => cachedEmployees || []);
+  const [loading, setLoading] = useState(() => !cachedClients);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 

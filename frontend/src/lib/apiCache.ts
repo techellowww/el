@@ -11,15 +11,32 @@ interface CacheEntry<T> {
 const cacheStore = new Map<string, CacheEntry<any>>();
 const inFlightRequests = new Map<string, Promise<any>>();
 
+export function getCachedData<T = any>(url: string, ttlMs: number = 60000): T | null {
+  const cached = cacheStore.get(url);
+  if (!cached) return null;
+  if (Date.now() - cached.timestamp >= ttlMs) {
+    return null;
+  }
+  return cached.data;
+}
+
+export function setCachedData<T = any>(url: string, data: T): void {
+  cacheStore.set(url, { data, timestamp: Date.now() });
+}
+
+export function prefetchApi(url: string, ttlMs?: number): void {
+  cachedFetch(url, { ttlMs }).catch(() => {});
+}
+
 export async function cachedFetch<T = any>(
   url: string,
   options?: {
-    ttlMs?: number; // default: 30 seconds
+    ttlMs?: number; // default: 60 seconds
     forceRefresh?: boolean;
     init?: RequestInit;
   }
 ): Promise<T> {
-  const ttl = options?.ttlMs ?? 30000;
+  const ttl = options?.ttlMs ?? 60000;
   const now = Date.now();
   const cached = cacheStore.get(url);
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { requireClientAccess, requireAdmin, NotFoundError } from "@/lib/auth/access";
 import { prisma } from "@/lib/prisma";
+import { getSubProjectsForProjects } from "@/lib/server/subProjectService";
 import { getServerCache, setServerCache, invalidateServerCache } from "@/lib/server/apiServerCache";
 
 export function invalidateProjectsCache(accountId: string) {
@@ -47,6 +48,13 @@ export async function GET(request?: Request) {
             name: true,
             company: true,
             email: true,
+            notes: true,
+            assignments: {
+              select: {
+                userId: true,
+                user: { select: { id: true, name: true, email: true, role: true } },
+              },
+            },
           },
         },
         statusUpdates: {
@@ -91,7 +99,7 @@ export async function GET(request?: Request) {
   }));
 
   const responseData = { projects: projectsWithSubProjects };
-  setServerCache(cacheKey, responseData, 15000); // 15s cache
+  setServerCache(cacheKey, responseData, 30000);
   return NextResponse.json(responseData);
 }
 

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuthStore, useChatStore } from "@/lib/store";
 import { getStageBadge } from "@/lib/utils";
-import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
+import { cachedFetch, invalidateApiCache, getCachedData } from "@/lib/apiCache";
 import {
   FolderKanban,
   Plus,
@@ -24,9 +24,11 @@ import {
 
 export default function ProjectsPage() {
   const { user } = useAuthStore();
-  const [projects, setProjects] = useState<any[]>([]);
-  const [clients, setClients] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedProjects = getCachedData<{ projects: any[] }>("/api/projects")?.projects;
+  const cachedClients = getCachedData<{ clients: any[] }>("/api/clients")?.clients;
+  const [projects, setProjects] = useState<any[]>(() => cachedProjects || []);
+  const [clients, setClients] = useState<any[]>(() => cachedClients || []);
+  const [loading, setLoading] = useState(() => !cachedProjects);
   const [error, setError] = useState<string | null>(null);
 
   // New Project Modal State

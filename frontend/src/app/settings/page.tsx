@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useAuthStore } from "@/lib/store";
-import { cachedFetch, invalidateApiCache } from "@/lib/apiCache";
+import { cachedFetch, invalidateApiCache, getCachedData } from "@/lib/apiCache";
 import {
   Settings as SettingsIcon,
   Building,
@@ -24,15 +24,16 @@ export default function SettingsPage() {
   const { user, setAgencyBranding } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
 
-  const [loading, setLoading] = useState(true);
-  const [account, setAccount] = useState<any | null>(null);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const cachedData = getCachedData<{ account: any; auditLogs: any[] }>("/api/settings");
+  const [loading, setLoading] = useState(() => !cachedData);
+  const [account, setAccount] = useState<any | null>(() => cachedData?.account || null);
+  const [auditLogs, setAuditLogs] = useState<any[]>(() => cachedData?.auditLogs || []);
 
   // Form states
-  const [agencyName, setAgencyName] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  const [logoUrl, setLogoUrl] = useState("");
-  const [replyToEmail, setReplyToEmail] = useState("");
+  const [agencyName, setAgencyName] = useState(() => cachedData?.account?.name || "");
+  const [currency, setCurrency] = useState(() => cachedData?.account?.currency || "USD");
+  const [logoUrl, setLogoUrl] = useState(() => cachedData?.account?.logoUrl || "");
+  const [replyToEmail, setReplyToEmail] = useState(() => cachedData?.account?.replyToEmail || "");
   const [emailPreferences, setEmailPreferences] = useState<Record<string, boolean>>({
     STATUS_UPDATE: true,
     MEETING_INVITE: true,

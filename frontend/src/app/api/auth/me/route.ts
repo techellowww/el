@@ -11,6 +11,13 @@ export async function GET(request: Request) {
       { status: 401 }
     );
   }
-  const token = extractTokenFromRequest(request);
+  let token = extractTokenFromRequest(request);
+  if (!token) {
+    try {
+      const { cookies } = await import('next/headers');
+      const cookieStore = await cookies();
+      token = cookieStore.get('ch_session')?.value || cookieStore.get('el_token')?.value || null;
+    } catch {}
+  }
   return NextResponse.json({ user, token });
 }

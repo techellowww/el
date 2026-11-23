@@ -80,6 +80,7 @@ function playNotificationTone() {
 
 export function ChatDrawer() {
   const { user, token, fetchUser } = useAuthStore();
+  const tokenFetchAttemptedRef = useRef(false);
   const {
     isOpen,
     setIsOpen,
@@ -289,10 +290,13 @@ export function ChatDrawer() {
     scrollToBottom();
   }, [messages]);
 
-  // If user is authenticated but token not yet in store, fetch it
+  // If user is authenticated but token not yet in store, fetch it once
   useEffect(() => {
-    if (user && !token) {
+    if (user && !token && !tokenFetchAttemptedRef.current) {
+      tokenFetchAttemptedRef.current = true;
       fetchUser();
+    } else if (!user) {
+      tokenFetchAttemptedRef.current = false;
     }
   }, [user, token, fetchUser]);
 

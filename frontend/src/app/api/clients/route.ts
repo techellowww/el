@@ -35,9 +35,8 @@ export async function GET(request: Request) {
     ...c,
     chatLink: (c as any).chatLink || extractClientChatLink(c),
   }));
-
   const responseData = { clients: enrichedClients };
-  setServerCache(cacheKey, responseData, 15000); // 15s cache
+  setServerCache(cacheKey, responseData, 30000);
   return NextResponse.json(responseData);
 }
 

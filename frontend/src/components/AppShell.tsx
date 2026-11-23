@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore, useTimerStore } from '@/lib/store';
 import { formatSecondsToTimer, getInitials } from '@/lib/utils';
+import { prefetchApi } from '@/lib/apiCache';
 import {
   captureAndUploadActivityScreenshot,
   requestScreenStream,
@@ -83,6 +84,35 @@ function getPageMetadata(pathname: string) {
   return { title: 'ClientHub', subtitle: 'Agency Operations Platform', section: 'WORKSPACE' };
 }
 
+function prefetchRouteData(href: string) {
+  if (href === '/clients') {
+    prefetchApi('/api/clients');
+    prefetchApi('/api/employees');
+  } else if (href === '/projects') {
+    prefetchApi('/api/projects');
+    prefetchApi('/api/clients');
+  } else if (href === '/proposals') {
+    prefetchApi('/api/proposals');
+    prefetchApi('/api/clients');
+    prefetchApi('/api/projects');
+  } else if (href === '/settings') {
+    prefetchApi('/api/settings');
+    prefetchApi('/api/settings/branding');
+  } else if (href === '/invoices') {
+    prefetchApi('/api/invoices');
+    prefetchApi('/api/clients');
+    prefetchApi('/api/projects');
+  } else if (href === '/dashboard') {
+    prefetchApi('/api/clients');
+    prefetchApi('/api/projects');
+    prefetchApi('/api/time');
+  } else if (href === '/time-sheet') {
+    prefetchApi('/api/time');
+    prefetchApi('/api/projects');
+    prefetchApi('/api/employees');
+  }
+}
+
 function SidebarTimerBadge() {
   const elapsedSeconds = useTimerStore((s) => s.elapsedSeconds);
   return (
@@ -126,8 +156,22 @@ function MobileTimerBadge() {
 function ShellRoot({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, agencyBranding, setAgencyBranding, fetchBranding, isLoading, isLoggingOut, fetchUser, logout } = useAuthStore();
-  const { activeTimer, screenshotSetting, syncActiveTimer, stopTimer, tick } = useTimerStore();
+  const user = useAuthStore((s) => s.user);
+  const agencyBranding = useAuthStore((s) => s.agencyBranding);
+  const fetchBranding = useAuthStore((s) => s.fetchBranding);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const isLoggingOut = useAuthStore((s) => s.isLoggingOut);
+  const fetchUser = useAuthStore((s) => s.fetchUser);
+  const logout = useAuthStore((s) => s.logout);
+
+  const activeTimer = useTimerStore((s) => s.activeTimer);
+  const screenshotSetting = useTimerStore((s) => s.screenshotSetting);
+  const syncActiveTimer = useTimerStore((s) => s.syncActiveTimer);
+  const stopTimer = useTimerStore((s) => s.stopTimer);
+  const tick = useTimerStore((s) => s.tick);
+
+  const userFetchAttemptedRef = useRef(false);
+  const brandingFetchedRef = useRef(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentDateStr, setCurrentDateStr] = useState('');
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -348,10 +392,29 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
 
   // Real-time synchronization of agency branding (agency name & brand logo) for the sidebar
   useEffect(() => {
-    if (user) {
+    if (user && !brandingFetchedRef.current) {
+      brandingFetchedRef.current = true;
       fetchBranding();
+    } else if (!user) {
+      brandingFetchedRef.current = false;
     }
-  }, [user, fetchBranding]);
+  }, [user?.id, fetchBranding]);
+
+  // Proactively warm up primary routes in the background so all page switches are instant
+  useEffect(() => {
+    if (!user) return;
+    const warmupTimer = setTimeout(() => {
+      prefetchApi('/api/clients');
+      prefetchApi('/api/projects');
+      if (user.role === 'ADMIN') {
+        prefetchApi('/api/proposals');
+        prefetchApi('/api/settings');
+        prefetchApi('/api/invoices');
+        prefetchApi('/api/employees');
+      }
+    }, 400);
+    return () => clearTimeout(warmupTimer);
+  }, [user?.id, user?.role]);
 
   // Periodic background check for automated email report dispatch
   useEffect(() => {
@@ -379,8 +442,9 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   // Initial user fetch (only once if not loaded and not logging out)
   useEffect(() => {
     if (isLoggingOut || pathname === '/login') return;
-    if (!user) {
+    if (!user && !userFetchAttemptedRef.current) {
       if (isPublicRoute) return;
+      userFetchAttemptedRef.current = true;
       fetchUser().then((u) => {
         if (!u && !isPublicRoute) {
           router.replace('/login');
@@ -388,6 +452,8 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
           syncActiveTimer();
         }
       });
+    } else if (user) {
+      userFetchAttemptedRef.current = false;
     }
   }, [user, fetchUser, pathname, router, syncActiveTimer, isPublicRoute, isLoggingOut]);
 
@@ -765,6 +831,9 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                     data-testid={navId}
                     href={item.href}
                     prefetch={true}
+                    onMouseEnter={() => prefetchRouteData(item.href)}
+                    onFocus={() => prefetchRouteData(item.href)}
+                    onTouchStart={() => prefetchRouteData(item.href)}
                     className={`group relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
                       isActive
                         ? 'bg-primary text-white shadow-sm font-medium'
@@ -1254,6 +1323,9 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                           data-testid={mobileNavId}
                           href={item.href}
                           prefetch={true}
+                          onMouseEnter={() => prefetchRouteData(item.href)}
+                          onFocus={() => prefetchRouteData(item.href)}
+                          onTouchStart={() => prefetchRouteData(item.href)}
                           onClick={() => setMobileMenuOpen(false)}
                           className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition ${
                             isActive
