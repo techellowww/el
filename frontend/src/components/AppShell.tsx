@@ -827,9 +827,9 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                     data-testid={navId}
                     href={item.href}
                     prefetch={true}
-                    onMouseEnter={() => prefetchRouteData(item.href)}
-                    onFocus={() => prefetchRouteData(item.href)}
-                    onTouchStart={() => prefetchRouteData(item.href)}
+                    onMouseEnter={() => prefetchRouteData(item.href, isAdmin)}
+                    onFocus={() => prefetchRouteData(item.href, isAdmin)}
+                    onTouchStart={() => prefetchRouteData(item.href, isAdmin)}
                     className={`group relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${isActive
                         ? 'bg-primary text-white shadow-sm font-medium'
                         : 'text-slate-300 hover:text-white hover:bg-navy-surface'
