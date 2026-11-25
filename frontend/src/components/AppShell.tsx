@@ -613,6 +613,11 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     const checkInactivity = () => {
       if (!activeTimer || isAutoStoppingRef.current) return;
 
+      const startMs = new Date(activeTimer.startTime).getTime();
+      if (!isNaN(startMs) && lastActivityTimeRef.current < startMs) {
+        lastActivityTimeRef.current = startMs;
+      }
+
       const { warnMs, autoCutMs } = getInactivityThresholds();
       const now = Date.now();
       const idleMs = now - lastActivityTimeRef.current;

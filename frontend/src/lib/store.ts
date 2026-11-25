@@ -273,6 +273,12 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
       const isTimerOvertime = Boolean(isOvertime || (timer.description && /\[Overtime\]/i.test(timer.description)));
 
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('el_last_activity_time', String(Date.now()));
+        } catch {}
+      }
+
       set({
         activeTimer: {
           id: timer.id,
@@ -292,12 +298,6 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         isLoading: false,
         error: null,
       });
-
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('el_last_activity_time', String(Date.now()));
-        } catch {}
-      }
 
       return true;
     } catch (err) {
@@ -373,11 +373,14 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         const autocutLimit = isTesting ? 15 * 1000 : 15 * 60 * 1000;
         const savedLastActivity = localStorage.getItem('el_last_activity_time');
         if (savedLastActivity) {
-          const lastAct = parseInt(savedLastActivity, 10);
-          if (!isNaN(lastAct) && (Date.now() - lastAct >= autocutLimit)) {
-            const cutTime = new Date(lastAct + autocutLimit);
-            get().stopTimer('[Auto-stopped: 15 minutes of inactivity - no keyboard or mouse movement]', cutTime);
-            return;
+          const parsedLastAct = parseInt(savedLastActivity, 10);
+          if (!isNaN(parsedLastAct)) {
+            const effectiveLastAct = Math.max(parsedLastAct, startMs);
+            if (Date.now() - effectiveLastAct >= autocutLimit) {
+              const cutTime = new Date(effectiveLastAct + autocutLimit);
+              get().stopTimer('[Auto-stopped: 15 minutes of inactivity - no keyboard or mouse movement]', cutTime);
+              return;
+            }
           }
         }
       }
