@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
+import { requireAdmin } from "@/lib/auth/access";
 import {
   getFailedNotificationAlerts,
   retryFailedNotifications,
@@ -10,6 +11,11 @@ export async function GET(request: Request) {
   const session = await getSessionUser(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  try {
+    requireAdmin(session);
+  } catch {
+    return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
   }
 
   try {
@@ -24,6 +30,11 @@ export async function POST(request: Request) {
   const session = await getSessionUser(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  try {
+    requireAdmin(session);
+  } catch {
+    return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
   }
 
   try {
@@ -51,6 +62,11 @@ export async function DELETE(request: Request) {
   const session = await getSessionUser(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  try {
+    requireAdmin(session);
+  } catch {
+    return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
   }
 
   try {

@@ -62,7 +62,12 @@ export async function POST(req: NextRequest) {
       update: {
         ...(enabled !== undefined && { enabled }),
         ...(scheduleType !== undefined && { scheduleType }),
-        ...(scheduleTime !== undefined && { scheduleTime }),
+        ...(scheduleTime !== undefined && {
+          scheduleTime,
+          dailyTime: dailyTime || scheduleTime,
+          weeklyTime: weeklyTime || scheduleTime,
+          monthlyTime: monthlyTime || scheduleTime,
+        }),
         ...(dailyEnabled !== undefined && { dailyEnabled }),
         ...(dailyTime && { dailyTime }),
         ...(weeklyEnabled !== undefined && { weeklyEnabled }),
@@ -79,7 +84,7 @@ export async function POST(req: NextRequest) {
         ...(smtpPass !== undefined && { smtpPass }),
         ...(smtpFrom !== undefined && { smtpFrom }),
         // If timing or schedule is modified, clear lastSentKey so updated schedule can dispatch
-        ...((scheduleTime !== undefined || dailyTime !== undefined || weeklyTime !== undefined || monthlyTime !== undefined || scheduleType !== undefined) && {
+        ...((scheduleTime !== undefined || dailyTime !== undefined || weeklyTime !== undefined || monthlyTime !== undefined || scheduleType !== undefined || timezone !== undefined) && {
           lastSentKey: null,
         }),
       },

@@ -9,6 +9,10 @@ export const dynamic = "force-dynamic";
 // Office Timings Route - auto-cutoff supported
 export async function GET(request?: Request) {
   try {
+    const session = await getSessionUser(request);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const schedule = await prisma.officeSchedule.findUnique({
       where: { id: 'default-schedule' },
     });

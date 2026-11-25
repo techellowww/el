@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
+import { getSessionUser } from '@/lib/auth/session';
 import { enforceGlobalOfficeCutoffs } from '@/lib/server/timerEngine';
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const session = await getSessionUser(request);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (session.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+    }
     const result = await enforceGlobalOfficeCutoffs();
     return NextResponse.json({
       success: true,

@@ -653,8 +653,6 @@ export function ChatDrawer() {
     }
   };
 
-  if (!user) return null;
-
   const sortedConversations = React.useMemo(() => {
     return [...conversations].sort((a, b) => {
       const unreadA = unreadCounts[a.id] || 0;
@@ -665,6 +663,8 @@ export function ChatDrawer() {
       return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
     });
   }, [conversations, unreadCounts]);
+
+  if (!user) return null;
 
   const activeConv = conversations.find((c) => c.id === activeConvId);
   const typingList = Object.values(typingUsers);

@@ -13,6 +13,38 @@ export async function GET(request?: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Non-admin employees only receive minimal active teammate directory (for calendar attendee selection),
+  // without emails, phones, assigned clients, tracked hours, or active timers.
+  if (session.role !== "ADMIN") {
+    try {
+      const teammates = await prisma.user.findMany({
+        where: { accountId: session.accountId, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          displayName: true,
+          role: true,
+          avatarUrl: true,
+          department: true,
+          employeeId: true,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      return NextResponse.json({ employees: teammates, clients: [] });
+    } catch {
+      const teammates = await prisma.user.findMany({
+        where: { accountId: session.accountId, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          role: true,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      return NextResponse.json({ employees: teammates, clients: [] });
+    }
+  }
+
   let users: any[] = [];
   let clients: any[] = [];
   let timeAggregates: any[] = [];

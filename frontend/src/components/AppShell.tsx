@@ -71,10 +71,10 @@ function getPageMetadata(pathname: string) {
   return { title: 'ClientHub', subtitle: 'Agency Operations Platform', section: 'WORKSPACE' };
 }
 
-function prefetchRouteData(href: string) {
+function prefetchRouteData(href: string, isAdmin: boolean) {
   if (href === '/clients') {
     prefetchApi('/api/clients');
-    prefetchApi('/api/employees');
+    if (isAdmin) prefetchApi('/api/employees');
   } else if (href === '/projects') {
     prefetchApi('/api/projects');
     prefetchApi('/api/clients');
@@ -96,7 +96,7 @@ function prefetchRouteData(href: string) {
   } else if (href === '/time-sheet') {
     prefetchApi('/api/time');
     prefetchApi('/api/projects');
-    prefetchApi('/api/employees');
+    if (isAdmin) prefetchApi('/api/employees');
   }
 }
 
@@ -251,9 +251,9 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
 
     // Clear any milestone state from a previous session for this timer id
     const storageKey = `el_screenshot_milestone_${activeTimer.id}`;
-    try { sessionStorage.removeItem(storageKey); } catch {}
+    try { sessionStorage.removeItem(storageKey); } catch { }
 
-        // Ensure screen stream is active and capture initial milestone
+    // Ensure screen stream is active and capture initial milestone
     (async () => {
       let stream = getActiveScreenStream();
       if (!stream && !isScreenStreamActive()) {
@@ -265,7 +265,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
         const intervalMinutes = Math.max(1, screenshotSetting.intervalMinutes || 15);
         try {
           sessionStorage.setItem(storageKey, '0');
-        } catch {}
+        } catch { }
         lastCapturedIndexRef.current = 0;
         captureAndUploadActivityScreenshot({
           userId: user.id,
@@ -282,7 +282,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
         });
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTimer?.id, screenshotSetting?.enabled]);
 
   const handlePromptShareScreen = async () => {
@@ -299,7 +299,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
         const storageKey = `el_screenshot_milestone_${activeTimer.id}`;
         try {
           sessionStorage.setItem(storageKey, String(targetMilestone));
-        } catch {}
+        } catch { }
         lastCapturedIndexRef.current = targetMilestone;
 
         await captureAndUploadActivityScreenshot({
@@ -345,7 +345,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       if (targetMilestone > lastCapturedMilestone) {
         try {
           sessionStorage.setItem(storageKey, String(targetMilestone));
-        } catch {}
+        } catch { }
         lastCapturedIndexRef.current = targetMilestone;
 
         captureAndUploadActivityScreenshot({
@@ -409,7 +409,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     const checkDispatch = async () => {
       try {
         await fetch('/api/mail/dispatch-check');
-      } catch {}
+      } catch { }
     };
     const timer = setTimeout(checkDispatch, 5000);
     const interval = setInterval(checkDispatch, 60000);
@@ -477,7 +477,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.6);
-    } catch {}
+    } catch { }
   };
 
   const getInactivityThresholds = () => {
@@ -493,7 +493,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     lastActivityTimeRef.current = now;
     try {
       localStorage.setItem('el_last_activity_time', String(now));
-    } catch {}
+    } catch { }
     idleWarningSoundPlayedRef.current = false;
     showIdleWarningRef.current = false;
     setShowIdleWarning(false);
@@ -529,7 +529,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       lastActivityTimeRef.current = now;
       try {
         localStorage.setItem('el_last_activity_time', String(now));
-      } catch {}
+      } catch { }
     }
   };
 
@@ -548,7 +548,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
         lastActivityTimeRef.current = now;
         try {
           localStorage.setItem('el_last_activity_time', String(now));
-        } catch {}
+        } catch { }
         showIdleWarningRef.current = false;
         setShowIdleWarning(false);
         idleWarningSoundPlayedRef.current = false;
@@ -573,7 +573,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
         lastActivityTimeRef.current = now;
         try {
           localStorage.setItem('el_last_activity_time', String(now));
-        } catch {}
+        } catch { }
 
         // Maintain screen sharing in active state while timer is running
         if (isScreenStreamActive()) {
@@ -594,7 +594,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
           lastActivityTimeRef.current = parsed;
         }
       }
-    } catch {}
+    } catch { }
 
     return () => {
       events.forEach((ev) => window.removeEventListener(ev, handleUserActivity));
@@ -665,21 +665,20 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   }, []);
 
   const isAdmin = user?.role === 'ADMIN';
+  const isAdminOnlyRoute =
+    pathname === '/proposals' ||
+    pathname === '/invoices' ||
+    pathname === '/settings' ||
+    pathname === '/employees' ||
+    pathname === '/mail' ||
+    pathname === '/screenshot';
 
   // Redirect non-admin / employee users away from admin-only modules
   useEffect(() => {
-    if (
-      user &&
-      !isAdmin &&
-      (pathname === '/proposals' ||
-        pathname === '/invoices' ||
-        pathname === '/settings' ||
-        pathname === '/mail' ||
-        pathname === '/screenshot')
-    ) {
+    if (user && !isAdmin && isAdminOnlyRoute) {
       router.replace('/dashboard');
     }
-  }, [user, isAdmin, pathname, router]);
+  }, [user, isAdmin, isAdminOnlyRoute, router]);
 
   // Public client-facing private links (no login or staff shell required)
   // Standalone pages without Shell (login and root redirect)
@@ -701,6 +700,11 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
 
   // If logging out or unauthenticated on protected route, show clean neutral background matching login page
   if (isLoggingOut || (!user && !isLoading)) {
+    return <div className="min-h-screen bg-app-background" />;
+  }
+
+  // Block rendering admin-only modules for non-admin users while redirecting
+  if (user && !isAdmin && isAdminOnlyRoute) {
     return <div className="min-h-screen bg-app-background" />;
   }
 
@@ -731,16 +735,16 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     },
     ...(isAdmin
       ? [
-          {
-            title: 'COMMERCIAL',
-            items: [
-              { href: '/proposals', label: 'Proposals', icon: Sparkles },
-              { href: '/invoices', label: 'Invoices', icon: CreditCard },
-              { href: '/settings', label: 'Settings', icon: Settings },
-              { href: '/employees', label: 'Employees', icon: UserCheck },
-            ],
-          },
-        ]
+        {
+          title: 'COMMERCIAL',
+          items: [
+            { href: '/proposals', label: 'Proposals', icon: Sparkles },
+            { href: '/invoices', label: 'Invoices', icon: CreditCard },
+            { href: '/settings', label: 'Settings', icon: Settings },
+            { href: '/employees', label: 'Employees', icon: UserCheck },
+          ],
+        },
+      ]
       : []),
     {
       title: 'MODULES',
@@ -748,9 +752,9 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
         { href: '/office-timings', label: 'Office Timings', icon: History },
         ...(isAdmin
           ? [
-              { href: '/mail', label: 'Mail', icon: Mail },
-              { href: '/screenshot', label: 'Screenshot', icon: Camera },
-            ]
+            { href: '/mail', label: 'Mail', icon: Mail },
+            { href: '/screenshot', label: 'Screenshot', icon: Camera },
+          ]
           : []),
       ],
     },
@@ -779,9 +783,8 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
             ) : null}
             <div
               id="sidebar-brand-initials"
-              className={`w-9 h-9 rounded-xl bg-primary flex items-center justify-center font-bold text-white text-sm shadow-sm group-hover:scale-105 transition-transform duration-200 shrink-0 ${
-                agencyBranding?.logoUrl ? 'hidden' : 'flex'
-              }`}
+              className={`w-9 h-9 rounded-xl bg-primary flex items-center justify-center font-bold text-white text-sm shadow-sm group-hover:scale-105 transition-transform duration-200 shrink-0 ${agencyBranding?.logoUrl ? 'hidden' : 'flex'
+                }`}
             >
               {getInitials(agencyBranding?.name || 'ClientHub')}
             </div>
@@ -827,16 +830,14 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                     onMouseEnter={() => prefetchRouteData(item.href)}
                     onFocus={() => prefetchRouteData(item.href)}
                     onTouchStart={() => prefetchRouteData(item.href)}
-                    className={`group relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-                      isActive
+                    className={`group relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${isActive
                         ? 'bg-primary text-white shadow-sm font-medium'
                         : 'text-slate-300 hover:text-white hover:bg-navy-surface'
-                    }`}
+                      }`}
                   >
                     <Icon
-                      className={`w-4 h-4 transition-colors ${
-                        isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'
-                      }`}
+                      className={`w-4 h-4 transition-colors ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'
+                        }`}
                     />
                     <span className="truncate">{item.label}</span>
                     {isActive && (
@@ -1316,15 +1317,14 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
                           data-testid={mobileNavId}
                           href={item.href}
                           prefetch={true}
-                          onMouseEnter={() => prefetchRouteData(item.href)}
-                          onFocus={() => prefetchRouteData(item.href)}
-                          onTouchStart={() => prefetchRouteData(item.href)}
+                          onMouseEnter={() => prefetchRouteData(item.href, isAdmin)}
+                          onFocus={() => prefetchRouteData(item.href, isAdmin)}
+                          onTouchStart={() => prefetchRouteData(item.href, isAdmin)}
                           onClick={() => setMobileMenuOpen(false)}
-                          className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition ${
-                            isActive
+                          className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition ${isActive
                               ? 'bg-primary text-white shadow-sm'
                               : 'text-slate-300 hover:bg-navy-surface'
-                          }`}
+                            }`}
                         >
                           <Icon className="w-4 h-4 shrink-0" />
                           <span className="truncate">{item.label}</span>

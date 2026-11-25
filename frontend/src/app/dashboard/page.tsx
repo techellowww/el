@@ -135,10 +135,10 @@ export default function DashboardPage() {
   };
 
   const handleStartQuickTimer = async (e?: React.FormEvent, forceOvertime?: boolean) => {
+    if (e) e.preventDefault();
     if (typeof window !== 'undefined' && !isScreenStreamActive()) {
       try { await requestScreenStream(); } catch {}
     }
-    if (e) e.preventDefault();
     if (!quickProjectId) {
       setTimerActionError("Please select a project to start tracking time.");
       return;

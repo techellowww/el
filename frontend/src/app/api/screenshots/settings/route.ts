@@ -34,6 +34,13 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request?: Request) {
   try {
+    const user = request ? await getAuthUser(request) : null;
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+    }
     const rawSettings = await prisma.screenshotSetting.findUnique({
       where: { id: 'default-screenshot-setting' },
     });

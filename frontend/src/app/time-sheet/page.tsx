@@ -181,10 +181,10 @@ export default function TimeSheetPage() {
     Boolean(filterUserId);
 
   const handleStartTimer = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (typeof window !== 'undefined' && !isScreenStreamActive()) {
       try { await requestScreenStream(); } catch {}
     }
-    e.preventDefault();
     if (!selectedProjectId) return;
 
     let targetProjectId = selectedProjectId;

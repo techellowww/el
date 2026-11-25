@@ -398,6 +398,7 @@ export function getZonedParts(date: Date, timeZone: string) {
     second: '2-digit',
     weekday: 'short',
     hour12: false,
+    hourCycle: 'h23',
   });
   const parts = formatter.formatToParts(date);
   const partMap: Record<string, string> = {};
@@ -458,7 +459,7 @@ export async function processScheduledEmailDispatch(options?: {
   let endDate = zoned.dateStr;
 
   if (scheduleType === 'DAILY') {
-    const timeStr = setting.dailyTime || setting.scheduleTime || '18:00';
+    const timeStr = setting.scheduleTime || setting.dailyTime || '18:00';
     const [targetH, targetM] = timeStr.split(':').map(Number);
     const targetTotalMin = (targetH || 0) * 60 + (targetM || 0);
 
@@ -479,7 +480,7 @@ export async function processScheduledEmailDispatch(options?: {
     endDate = zoned.dateStr;
   } else if (scheduleType === 'WEEKLY') {
     const targetDay = (setting.weeklyDay || 'FRI').toUpperCase();
-    const timeStr = setting.weeklyTime || setting.scheduleTime || '18:00';
+    const timeStr = setting.scheduleTime || setting.weeklyTime || '18:00';
     const [targetH, targetM] = timeStr.split(':').map(Number);
     const targetTotalMin = (targetH || 0) * 60 + (targetM || 0);
 
@@ -507,7 +508,7 @@ export async function processScheduledEmailDispatch(options?: {
     endDate = zoned.dateStr;
   } else if (scheduleType === 'MONTHLY') {
     const targetDay = setting.monthlyDay || 1;
-    const timeStr = setting.monthlyTime || setting.scheduleTime || '18:00';
+    const timeStr = setting.scheduleTime || setting.monthlyTime || '18:00';
     const [targetH, targetM] = timeStr.split(':').map(Number);
     const targetTotalMin = (targetH || 0) * 60 + (targetM || 0);
 
