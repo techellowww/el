@@ -450,6 +450,14 @@ export async function enforceOfficeCutoffForUser(userId: string) {
     }
 
     // 2. Daytime timer: Check if office closing time has been reached
+    const startMs = new Date(entry.startedAt).getTime();
+    const elapsedSeconds = Math.max(0, Math.round((now.getTime() - startMs) / 1000));
+
+    // Never auto-stop a timer that was just started (under 60 seconds)
+    if (elapsedSeconds < 60) {
+      continue;
+    }
+
     const currentZoned = toZonedTime(now, tz);
     const curMinutes = currentZoned.getHours() * 60 + currentZoned.getMinutes();
 
@@ -459,15 +467,12 @@ export async function enforceOfficeCutoffForUser(userId: string) {
     const hasOfficeEnded = startDayStr !== currentDayStr || curMinutes >= closeMinutes;
 
     if (hasOfficeEnded) {
-      const startMs = new Date(entry.startedAt).getTime();
-      const elapsedSeconds = Math.max(1, Math.round((now.getTime() - startMs) / 1000));
-
       await prisma.timeEntry.update({
         where: { id: entry.id },
         data: {
           isRunning: false,
           stoppedAt: now,
-          durationSeconds: elapsedSeconds,
+          durationSeconds: Math.max(1, elapsedSeconds),
           description: (entry.description ? entry.description + ' ' : '') + `[Auto-stopped: Office hours ended at ${closingTime}]`,
         },
       });
@@ -530,6 +535,14 @@ export async function enforceGlobalOfficeCutoffs() {
 
     // Overtime rule: Any timer marked as Overtime or started after office hours runs until manually stopped!
     if (isOvertimeTag || isStartedAfterOfficeHours) {
+      continue;
+    }
+
+    const startMs = new Date(entry.startedAt).getTime();
+    const elapsedSeconds = Math.max(0, Math.round((now.getTime() - startMs) / 1000));
+
+    // Never auto-stop a timer that was just started (under 60 seconds)
+    if (elapsedSeconds < 60) {
       continue;
     }
 

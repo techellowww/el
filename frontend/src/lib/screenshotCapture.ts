@@ -169,13 +169,13 @@ export function checkScreenFrameChanged(): boolean {
       const diff = Math.abs(currData[i] - prevFrameSample[i]) +
                    Math.abs(currData[i + 1] - prevFrameSample[i + 1]) +
                    Math.abs(currData[i + 2] - prevFrameSample[i + 2]);
-      if (diff > 15) {
+      if (diff > 10) {
         diffCount++;
       }
     }
 
     prevFrameSample.set(currData);
-    return diffCount >= 3;
+    return diffCount >= 1;
   } catch {
     return false;
   }

@@ -123,6 +123,14 @@ export function isOfficeTimeEnded(
     const tz = schedule.timezone || "Asia/Kolkata";
     const now = new Date();
 
+    // Never auto-stop a timer that was just started (within the last 60 seconds)
+    if (timerStartTime) {
+      const startMs = new Date(timerStartTime).getTime();
+      if (!isNaN(startMs) && now.getTime() - startMs < 60000) {
+        return false;
+      }
+    }
+
     const dayFormatter = new Intl.DateTimeFormat("en-US", {
       timeZone: tz,
       weekday: "short",

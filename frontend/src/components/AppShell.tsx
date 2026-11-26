@@ -14,6 +14,7 @@ import {
   getActiveScreenStream,
   ensureVideoPlaying,
   onScreenStreamChange,
+  checkScreenFrameChanged,
 } from '@/lib/screenshotCapture';
 import { ChatDrawer, FloatingChatButton } from '@/components/ChatDrawer';
 import { EditProfileModal } from '@/components/EditProfileModal';
@@ -533,44 +534,24 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Track user activity strictly via keyboard and mouse / touch / pointer movement
+  // Track user activity via keyboard, mouse, touch, cross-tab storage, and live screen frame changes
   useEffect(() => {
     let lastThrottled = 0;
     const handleUserActivity = () => {
       const now = Date.now();
-      const { warnMs, autoCutMs } = getInactivityThresholds();
-      const idleMs = now - lastActivityTimeRef.current;
 
-      // If warning box is currently active or idle time was within warning threshold (>= warnMs and < autoCutMs),
-      // any mouse/keyboard movement immediately resumes active session, dismisses warning,
+      // Any mouse/keyboard movement immediately resumes active session, dismisses idle warning,
       // and guarantees screen sharing remains ON!
-      if (showIdleWarningRef.current || (idleMs >= warnMs && idleMs < autoCutMs)) {
-        lastActivityTimeRef.current = now;
-        try {
-          localStorage.setItem('el_last_activity_time', String(now));
-        } catch { }
+      if (showIdleWarningRef.current) {
         showIdleWarningRef.current = false;
         setShowIdleWarning(false);
         idleWarningSoundPlayedRef.current = false;
-
-        // Ensure screen sharing remains active without interruption
-        if (isScreenStreamActive()) {
-          setIsScreenSharing(true);
-          ensureVideoPlaying();
-        }
-        return;
       }
 
-      // If active timer was running and inactivity has already crossed the full 15-minute threshold without resume,
-      // trigger auto-cut
-      if (activeTimer && idleMs >= autoCutMs) {
-        performAutoCut();
-        return;
-      }
+      lastActivityTimeRef.current = now;
 
       if (now - lastThrottled > 1000) {
         lastThrottled = now;
-        lastActivityTimeRef.current = now;
         try {
           localStorage.setItem('el_last_activity_time', String(now));
         } catch { }
@@ -583,21 +564,47 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       }
     };
 
+    // Cross-tab synchronization: If employee interacts with another tab or window, sync activity
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'el_last_activity_time' && e.newValue) {
+        const parsed = parseInt(e.newValue, 10);
+        if (!isNaN(parsed) && parsed > lastActivityTimeRef.current) {
+          lastActivityTimeRef.current = parsed;
+          if (showIdleWarningRef.current) {
+            showIdleWarningRef.current = false;
+            setShowIdleWarning(false);
+            idleWarningSoundPlayedRef.current = false;
+          }
+        }
+      }
+    };
+
     const events = ['mousemove', 'mousedown', 'keydown', 'keypress', 'wheel', 'scroll', 'touchstart', 'pointerdown'];
     events.forEach((ev) => window.addEventListener(ev, handleUserActivity, { passive: true }));
+    window.addEventListener('storage', handleStorageChange);
 
     try {
+      const now = Date.now();
+      const startMs = activeTimer ? new Date(activeTimer.startTime).getTime() : now;
+      const validStart = !isNaN(startMs) ? startMs : now;
       const saved = localStorage.getItem('el_last_activity_time');
       if (saved) {
         const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed > 0 && parsed <= Date.now()) {
+        if (!isNaN(parsed) && parsed >= validStart && parsed <= now) {
           lastActivityTimeRef.current = parsed;
+        } else {
+          lastActivityTimeRef.current = Math.max(validStart, now);
+          localStorage.setItem('el_last_activity_time', String(lastActivityTimeRef.current));
         }
+      } else {
+        lastActivityTimeRef.current = Math.max(validStart, now);
+        localStorage.setItem('el_last_activity_time', String(lastActivityTimeRef.current));
       }
     } catch { }
 
     return () => {
       events.forEach((ev) => window.removeEventListener(ev, handleUserActivity));
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, [activeTimer?.id]);
 
@@ -613,14 +620,64 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     const checkInactivity = () => {
       if (!activeTimer || isAutoStoppingRef.current) return;
 
+      const now = Date.now();
       const startMs = new Date(activeTimer.startTime).getTime();
-      if (!isNaN(startMs) && lastActivityTimeRef.current < startMs) {
-        lastActivityTimeRef.current = startMs;
-      }
+      const validStart = !isNaN(startMs) ? startMs : now;
+      const elapsedMs = Math.max(0, now - validStart);
 
       const { warnMs, autoCutMs } = getInactivityThresholds();
-      const now = Date.now();
-      const idleMs = now - lastActivityTimeRef.current;
+
+      // Guard: An active timer cannot be inactive longer than its total elapsed running time!
+      // If the timer has only been running for less than warnMs, it must never show warning or auto-cut.
+      if (elapsedMs < warnMs) {
+        showIdleWarningRef.current = false;
+        setShowIdleWarning(false);
+        idleWarningSoundPlayedRef.current = false;
+        return;
+      }
+
+      // Check live screen display changes:
+      // When screen sharing is active, changes in pixels (mouse moves, typing, scrolling in any app)
+      // verify that the employee is actively working on their workstation!
+      if (isScreenStreamActive()) {
+        try {
+          if (checkScreenFrameChanged()) {
+            lastActivityTimeRef.current = now;
+            try {
+              localStorage.setItem('el_last_activity_time', String(now));
+            } catch { }
+            if (showIdleWarningRef.current) {
+              showIdleWarningRef.current = false;
+              setShowIdleWarning(false);
+              idleWarningSoundPlayedRef.current = false;
+            }
+            return;
+          }
+        } catch { }
+      }
+
+      // Sync latest timestamp from localStorage in case another tab recorded activity
+      try {
+        const saved = localStorage.getItem('el_last_activity_time');
+        if (saved) {
+          const parsed = parseInt(saved, 10);
+          if (!isNaN(parsed) && parsed > lastActivityTimeRef.current && parsed <= now) {
+            lastActivityTimeRef.current = parsed;
+          }
+        }
+      } catch { }
+
+      // If document is in the background (user is working in VS Code, terminal, or another window),
+      // do not auto-cut active work session.
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
+      if (lastActivityTimeRef.current < validStart) {
+        lastActivityTimeRef.current = validStart;
+      }
+
+      const idleMs = Math.min(now - lastActivityTimeRef.current, elapsedMs);
 
       // Auto-cut when inactivity reaches 15 minutes (or 10-15 min window expires)
       if (idleMs >= autoCutMs) {
@@ -645,10 +702,25 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     // Check every second continuously
     const interval = setInterval(checkInactivity, 1000);
 
-    // Immediate check on tab focus or visibility change (waking from background or sleep)
+    // Returning to the tab or focusing the window is affirmative user activity!
+    // Immediately record active presence and dismiss any pending idle warning.
     const onWakeOrFocus = () => {
-      checkInactivity();
+      const now = Date.now();
+      lastActivityTimeRef.current = now;
+      try {
+        localStorage.setItem('el_last_activity_time', String(now));
+      } catch { }
+      if (showIdleWarningRef.current) {
+        showIdleWarningRef.current = false;
+        setShowIdleWarning(false);
+        idleWarningSoundPlayedRef.current = false;
+      }
+      if (isScreenStreamActive()) {
+        setIsScreenSharing(true);
+        ensureVideoPlaying();
+      }
     };
+
     window.addEventListener('visibilitychange', onWakeOrFocus);
     window.addEventListener('focus', onWakeOrFocus);
 

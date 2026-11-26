@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { requestScreenStream, stopScreenStream, isScreenStreamActive } from './screenshotCapture';
+import { requestScreenStream, stopScreenStream, isScreenStreamActive, checkScreenFrameChanged } from './screenshotCapture';
 
 export interface AgencyBranding {
   name: string;
@@ -252,7 +252,9 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       }
     }
     set({ isLoading: true, error: null });
-    const isOvertime = typeof isOvertimeOrDuration === 'boolean' ? isOvertimeOrDuration : false;
+    const schedule = get().schedule;
+    const isAfterHours = schedule ? checkIsAfterOfficeHours(schedule).isAfterHours : false;
+    const isOvertime = typeof isOvertimeOrDuration === 'boolean' ? isOvertimeOrDuration : isAfterHours;
     try {
       const res = await fetch('/api/time', {
         method: 'POST',
@@ -358,7 +360,8 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
       // Rule 1: If timer is running and office time is ended, and if checkbox is checked (autoCutoffEnabled),
       // stop daytime timers automatically. Overtime timers run until manually stopped!
-      if (schedule && schedule.autoCutoffEnabled && !isOvertime && !get().isLoading) {
+      // Never auto-stop a timer that has been running for less than 60 seconds.
+      if (schedule && schedule.autoCutoffEnabled && !isOvertime && !get().isLoading && elapsed >= 60) {
         const ended = isOfficeTimeEnded(schedule, active.startTime, active.description);
         if (ended) {
           const closing = schedule.closingTime || 'closing time';
@@ -368,18 +371,39 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       }
 
       // Rule 2: Inactivity auto-cutoff (15 minutes of no keyboard or mouse movement)
+      // Never auto-stop if elapsed running time is less than autocutLimit
       if (!get().isLoading && typeof window !== 'undefined') {
         const isTesting = window.location.search.includes('testIdle=1');
         const autocutLimit = isTesting ? 15 * 1000 : 15 * 60 * 1000;
-        const savedLastActivity = localStorage.getItem('el_last_activity_time');
-        if (savedLastActivity) {
-          const parsedLastAct = parseInt(savedLastActivity, 10);
-          if (!isNaN(parsedLastAct)) {
-            const effectiveLastAct = Math.max(parsedLastAct, startMs);
-            if (Date.now() - effectiveLastAct >= autocutLimit) {
-              const cutTime = new Date(effectiveLastAct + autocutLimit);
-              get().stopTimer('[Auto-stopped: 15 minutes of inactivity - no keyboard or mouse movement]', cutTime);
+
+        // Active screen stream verification: if workstation screen frames are changing, user is active!
+        if (isScreenStreamActive()) {
+          try {
+            if (checkScreenFrameChanged()) {
+              localStorage.setItem('el_last_activity_time', String(Date.now()));
+              set({ elapsedSeconds: elapsed });
               return;
+            }
+          } catch { }
+        }
+
+        // If tab is in background while user works in other desktop applications, do not auto-cut
+        if (typeof document !== 'undefined' && document.hidden) {
+          set({ elapsedSeconds: elapsed });
+          return;
+        }
+
+        if (elapsed * 1000 >= autocutLimit) {
+          const savedLastActivity = localStorage.getItem('el_last_activity_time');
+          if (savedLastActivity) {
+            const parsedLastAct = parseInt(savedLastActivity, 10);
+            if (!isNaN(parsedLastAct)) {
+              const effectiveLastAct = Math.max(parsedLastAct, startMs);
+              if (Date.now() - effectiveLastAct >= autocutLimit) {
+                const cutTime = new Date(effectiveLastAct + autocutLimit);
+                get().stopTimer('[Auto-stopped: 15 minutes of inactivity - no keyboard or mouse movement]', cutTime);
+                return;
+              }
             }
           }
         }
