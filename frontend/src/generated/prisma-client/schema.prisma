@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma-client"
+  provider      = "prisma-client-js"
+  output        = "../src/generated/prisma-client"
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x", "windows"]
 }
 
 datasource db {
@@ -13,6 +14,8 @@ model Account {
   name               String
   currency           String              @default("USD")
   logoUrl            String?
+  replyToEmail       String?
+  emailSettings      String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   users              User[]
@@ -44,6 +47,14 @@ model User {
   email           String
   passwordHash    String
   name            String
+  displayName     String?
+  title           String?
+  phone           String?
+  avatarUrl       String?
+  timezone        String?            @default("Asia/Kolkata")
+  bio             String?
+  department      String?
+  employeeId      String?
   role            String             @default("EMPLOYEE") // "ADMIN" | "EMPLOYEE"
   isActive        Boolean            @default(true)
   createdAt       DateTime           @default(now())
@@ -162,6 +173,8 @@ model TimeEntry {
   projectId       String
   clientId        String?
   description     String?
+  deviceId        String?
+  lastActivityAt  DateTime?
   startedAt       DateTime
   stoppedAt       DateTime?
   durationSeconds Int                @default(0)
@@ -182,6 +195,8 @@ model TimeEntry {
   @@index([clientId])
   @@index([projectId])
   @@index([userId, isRunning])
+  @@index([accountId, startedAt])
+  @@index([userId, startedAt])
   @@map("ch_time_entries")
 }
 
@@ -250,22 +265,24 @@ model Proposal {
   @@index([accountId])
   @@index([clientId])
   @@index([status])
+  @@index([accountId, status])
   @@map("ch_proposals")
 }
 
 model ProposalVersion {
-  id            String              @id @default(uuid())
-  accountId     String
-  proposalId    String
-  versionNumber Int
-  contentJson   String?
-  contentHtml   String?
-  contentHash   String?
-  isLocked      Boolean             @default(false)
-  createdAt     DateTime            @default(now())
-  account       Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  proposal      Proposal            @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  signatures    ProposalSignature[]
+  id              String              @id @default(uuid())
+  accountId       String
+  proposalId      String
+  versionNumber   Int
+  contentJson     String?
+  contentHtml     String?
+  contentHash     String?
+  logoSnapshotUrl String?
+  isLocked        Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  account         Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  proposal        Proposal            @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  signatures      ProposalSignature[]
 
   @@unique([proposalId, versionNumber])
   @@index([accountId])
@@ -336,6 +353,7 @@ model Invoice {
   @@index([accountId])
   @@index([clientId])
   @@index([status])
+  @@index([accountId, status])
   @@map("ch_invoices")
 }
 
@@ -425,6 +443,8 @@ model Notification {
   type           String
   recipientEmail String
   subject        String
+  bodyHtml       String?
+  metadata       String?
   status         String    @default("QUEUED") // "QUEUED" | "SENT" | "FAILED"
   retryCount     Int       @default(0)
   errorLog       String?
@@ -434,6 +454,7 @@ model Notification {
   account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+  @@index([accountId, status])
   @@index([status, scheduledFor])
   @@map("ch_notifications")
 }
@@ -546,4 +567,20 @@ model EmailDeliveryLog {
 
   @@index([type, createdAt])
   @@map("ch_email_delivery_logs")
+}
+
+model SubProject {
+  id          String   @id @default(uuid())
+  projectId   String
+  accountId   String
+  name        String
+  description String?
+  stage       String   @default("IN_PROGRESS")
+  budgetHours Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([accountId])
+  @@map("ch_sub_projects")
 }

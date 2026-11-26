@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore, useTimerStore } from '@/lib/store';
 import { formatSecondsToTimer, getInitials } from '@/lib/utils';
+import { getClientDeviceId } from '@/lib/deviceId';
 import { prefetchApi } from '@/lib/apiCache';
 import {
   captureAndUploadActivityScreenshot,
@@ -182,6 +183,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   const lastActivityTimeRef = useRef<number>(Date.now());
   const idleWarningSoundPlayedRef = useRef<boolean>(false);
   const isAutoStoppingRef = useRef<boolean>(false);
+  const lastHeartbeatRef = useRef<number>(0);
 
   // Keep screen sharing status in sync with active timer
   useEffect(() => {
@@ -523,6 +525,16 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
 
   const performAutoCut = async () => {
     if (isAutoStoppingRef.current || !activeTimer) return;
+
+    // Multi-System Protection: Only the host device where the timer is running is permitted to auto-cut
+    const myDeviceId = getClientDeviceId();
+    const isHostingDevice = !activeTimer.deviceId || activeTimer.deviceId === myDeviceId;
+    if (!isHostingDevice) {
+      showIdleWarningRef.current = false;
+      setShowIdleWarning(false);
+      return;
+    }
+
     isAutoStoppingRef.current = true;
     showIdleWarningRef.current = false;
     setShowIdleWarning(false);
@@ -575,6 +587,16 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
         if (isScreenStreamActive()) {
           setIsScreenSharing(true);
           ensureVideoPlaying();
+        }
+
+        // Periodically send activity heartbeat to backend every 60 seconds
+        if (now - lastHeartbeatRef.current > 60000 && activeTimer) {
+          lastHeartbeatRef.current = now;
+          fetch('/api/time', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'HEARTBEAT' }),
+          }).catch(() => {});
         }
       }
     };
@@ -634,6 +656,20 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
 
     const checkInactivity = () => {
       if (!activeTimer || isAutoStoppingRef.current) return;
+
+      // Multi-System / Multi-Device Protection:
+      // If the timer was started on another system or device, THIS system is an observer.
+      // It MUST NOT show the idle warning modal and MUST NOT auto-cut the timer!
+      const myDeviceId = getClientDeviceId();
+      const isHostingDevice = !activeTimer.deviceId || activeTimer.deviceId === myDeviceId;
+      if (!isHostingDevice) {
+        if (showIdleWarningRef.current) {
+          showIdleWarningRef.current = false;
+          setShowIdleWarning(false);
+          idleWarningSoundPlayedRef.current = false;
+        }
+        return;
+      }
 
       const now = Date.now();
       const startMs = new Date(activeTimer.startTime).getTime();
@@ -708,7 +744,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       window.removeEventListener('visibilitychange', onWakeOrFocus);
       window.removeEventListener('focus', onWakeOrFocus);
     };
-  }, [activeTimer?.id, stopTimer]);
+  }, [activeTimer?.id, activeTimer?.deviceId, stopTimer]);
 
   useEffect(() => {
     setCurrentDateStr(

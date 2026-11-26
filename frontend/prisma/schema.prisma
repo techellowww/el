@@ -173,6 +173,8 @@ model TimeEntry {
   projectId       String
   clientId        String?
   description     String?
+  deviceId        String?
+  lastActivityAt  DateTime?
   startedAt       DateTime
   stoppedAt       DateTime?
   durationSeconds Int           @default(0)

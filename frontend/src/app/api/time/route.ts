@@ -158,7 +158,27 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { action, projectId, description, durationSeconds, startedAt, stoppedAt } = body;
+  const { action, projectId, description, durationSeconds, startedAt, stoppedAt, deviceId } = body;
+
+  // ACTION: HEARTBEAT (Keep-alive for active user tracking)
+  if (action === "HEARTBEAT") {
+    const running = await prisma.timeEntry.findFirst({
+      where: {
+        accountId: session.accountId,
+        userId: session.userId,
+        isRunning: true,
+      },
+    });
+
+    if (running) {
+      await prisma.timeEntry.update({
+        where: { id: running.id },
+        data: { lastActivityAt: new Date() },
+      });
+      return NextResponse.json({ ok: true, activeTimerId: running.id });
+    }
+    return NextResponse.json({ ok: true, activeTimerId: null });
+  }
 
   // ACTION: STOP TIMER (Does not require projectId - stops current active user timer)
   if (action === "STOP") {
@@ -173,6 +193,19 @@ export async function POST(request: Request) {
     if (!running) {
       // Gracefully clear active state if timer was already stopped
       return NextResponse.json({ entry: null, message: "No active running timer" });
+    }
+
+    // Inactivity Auto-Cut Protection across Multi-Device / Multi-Tab:
+    // If this STOP request is an automatic inactivity cutoff, ONLY the device that started the timer
+    // (or where the active tracking session is hosted) is permitted to auto-cut it.
+    // If another device (idle on another system) tries to auto-cut, gracefully ignore it.
+    const isAutoInactivityCut = Boolean(description && description.includes('[Auto-stopped: 15 minutes of inactivity'));
+    if (isAutoInactivityCut && running.deviceId && deviceId && deviceId !== running.deviceId) {
+      return NextResponse.json({
+        entry: running,
+        ignored: true,
+        message: "Inactivity auto-cutoff ignored: timer was started on another device.",
+      });
     }
 
     const now = new Date();
@@ -286,6 +319,8 @@ export async function POST(request: Request) {
         projectId: project.id,
         clientId: project.clientId,
         description: finalDesc || null,
+        deviceId: deviceId || null,
+        lastActivityAt: new Date(),
         startedAt: new Date(),
         isRunning: true,
         durationSeconds: 0,

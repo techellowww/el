@@ -11829,6 +11829,8 @@ export namespace Prisma {
     projectId: string | null
     clientId: string | null
     description: string | null
+    deviceId: string | null
+    lastActivityAt: Date | null
     startedAt: Date | null
     stoppedAt: Date | null
     durationSeconds: number | null
@@ -11846,6 +11848,8 @@ export namespace Prisma {
     projectId: string | null
     clientId: string | null
     description: string | null
+    deviceId: string | null
+    lastActivityAt: Date | null
     startedAt: Date | null
     stoppedAt: Date | null
     durationSeconds: number | null
@@ -11863,6 +11867,8 @@ export namespace Prisma {
     projectId: number
     clientId: number
     description: number
+    deviceId: number
+    lastActivityAt: number
     startedAt: number
     stoppedAt: number
     durationSeconds: number
@@ -11890,6 +11896,8 @@ export namespace Prisma {
     projectId?: true
     clientId?: true
     description?: true
+    deviceId?: true
+    lastActivityAt?: true
     startedAt?: true
     stoppedAt?: true
     durationSeconds?: true
@@ -11907,6 +11915,8 @@ export namespace Prisma {
     projectId?: true
     clientId?: true
     description?: true
+    deviceId?: true
+    lastActivityAt?: true
     startedAt?: true
     stoppedAt?: true
     durationSeconds?: true
@@ -11924,6 +11934,8 @@ export namespace Prisma {
     projectId?: true
     clientId?: true
     description?: true
+    deviceId?: true
+    lastActivityAt?: true
     startedAt?: true
     stoppedAt?: true
     durationSeconds?: true
@@ -12028,6 +12040,8 @@ export namespace Prisma {
     projectId: string
     clientId: string | null
     description: string | null
+    deviceId: string | null
+    lastActivityAt: Date | null
     startedAt: Date
     stoppedAt: Date | null
     durationSeconds: number
@@ -12064,6 +12078,8 @@ export namespace Prisma {
     projectId?: boolean
     clientId?: boolean
     description?: boolean
+    deviceId?: boolean
+    lastActivityAt?: boolean
     startedAt?: boolean
     stoppedAt?: boolean
     durationSeconds?: boolean
@@ -12089,6 +12105,8 @@ export namespace Prisma {
     projectId?: boolean
     clientId?: boolean
     description?: boolean
+    deviceId?: boolean
+    lastActivityAt?: boolean
     startedAt?: boolean
     stoppedAt?: boolean
     durationSeconds?: boolean
@@ -12111,6 +12129,8 @@ export namespace Prisma {
     projectId?: boolean
     clientId?: boolean
     description?: boolean
+    deviceId?: boolean
+    lastActivityAt?: boolean
     startedAt?: boolean
     stoppedAt?: boolean
     durationSeconds?: boolean
@@ -12133,6 +12153,8 @@ export namespace Prisma {
     projectId?: boolean
     clientId?: boolean
     description?: boolean
+    deviceId?: boolean
+    lastActivityAt?: boolean
     startedAt?: boolean
     stoppedAt?: boolean
     durationSeconds?: boolean
@@ -12143,7 +12165,7 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type TimeEntryOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "accountId" | "userId" | "projectId" | "clientId" | "description" | "startedAt" | "stoppedAt" | "durationSeconds" | "isRunning" | "isLocked" | "invoiceId" | "createdAt" | "updatedAt", ExtArgs["result"]["timeEntry"]>
+  export type TimeEntryOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "accountId" | "userId" | "projectId" | "clientId" | "description" | "deviceId" | "lastActivityAt" | "startedAt" | "stoppedAt" | "durationSeconds" | "isRunning" | "isLocked" | "invoiceId" | "createdAt" | "updatedAt", ExtArgs["result"]["timeEntry"]>
   export type TimeEntryInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     account?: boolean | AccountDefaultArgs<ExtArgs>
     user?: boolean | UserDefaultArgs<ExtArgs>
@@ -12187,6 +12209,8 @@ export namespace Prisma {
       projectId: string
       clientId: string | null
       description: string | null
+      deviceId: string | null
+      lastActivityAt: Date | null
       startedAt: Date
       stoppedAt: Date | null
       durationSeconds: number
@@ -12631,6 +12655,8 @@ export namespace Prisma {
     readonly projectId: FieldRef<"TimeEntry", 'String'>
     readonly clientId: FieldRef<"TimeEntry", 'String'>
     readonly description: FieldRef<"TimeEntry", 'String'>
+    readonly deviceId: FieldRef<"TimeEntry", 'String'>
+    readonly lastActivityAt: FieldRef<"TimeEntry", 'DateTime'>
     readonly startedAt: FieldRef<"TimeEntry", 'DateTime'>
     readonly stoppedAt: FieldRef<"TimeEntry", 'DateTime'>
     readonly durationSeconds: FieldRef<"TimeEntry", 'Int'>
@@ -35606,6 +35632,8 @@ export namespace Prisma {
     projectId: 'projectId',
     clientId: 'clientId',
     description: 'description',
+    deviceId: 'deviceId',
+    lastActivityAt: 'lastActivityAt',
     startedAt: 'startedAt',
     stoppedAt: 'stoppedAt',
     durationSeconds: 'durationSeconds',
@@ -36676,6 +36704,8 @@ export namespace Prisma {
     projectId?: StringFilter<"TimeEntry"> | string
     clientId?: StringNullableFilter<"TimeEntry"> | string | null
     description?: StringNullableFilter<"TimeEntry"> | string | null
+    deviceId?: StringNullableFilter<"TimeEntry"> | string | null
+    lastActivityAt?: DateTimeNullableFilter<"TimeEntry"> | Date | string | null
     startedAt?: DateTimeFilter<"TimeEntry"> | Date | string
     stoppedAt?: DateTimeNullableFilter<"TimeEntry"> | Date | string | null
     durationSeconds?: IntFilter<"TimeEntry"> | number
@@ -36700,6 +36730,8 @@ export namespace Prisma {
     projectId?: SortOrder
     clientId?: SortOrderInput | SortOrder
     description?: SortOrderInput | SortOrder
+    deviceId?: SortOrderInput | SortOrder
+    lastActivityAt?: SortOrderInput | SortOrder
     startedAt?: SortOrder
     stoppedAt?: SortOrderInput | SortOrder
     durationSeconds?: SortOrder
@@ -36727,6 +36759,8 @@ export namespace Prisma {
     projectId?: StringFilter<"TimeEntry"> | string
     clientId?: StringNullableFilter<"TimeEntry"> | string | null
     description?: StringNullableFilter<"TimeEntry"> | string | null
+    deviceId?: StringNullableFilter<"TimeEntry"> | string | null
+    lastActivityAt?: DateTimeNullableFilter<"TimeEntry"> | Date | string | null
     startedAt?: DateTimeFilter<"TimeEntry"> | Date | string
     stoppedAt?: DateTimeNullableFilter<"TimeEntry"> | Date | string | null
     durationSeconds?: IntFilter<"TimeEntry"> | number
@@ -36751,6 +36785,8 @@ export namespace Prisma {
     projectId?: SortOrder
     clientId?: SortOrderInput | SortOrder
     description?: SortOrderInput | SortOrder
+    deviceId?: SortOrderInput | SortOrder
+    lastActivityAt?: SortOrderInput | SortOrder
     startedAt?: SortOrder
     stoppedAt?: SortOrderInput | SortOrder
     durationSeconds?: SortOrder
@@ -36776,6 +36812,8 @@ export namespace Prisma {
     projectId?: StringWithAggregatesFilter<"TimeEntry"> | string
     clientId?: StringNullableWithAggregatesFilter<"TimeEntry"> | string | null
     description?: StringNullableWithAggregatesFilter<"TimeEntry"> | string | null
+    deviceId?: StringNullableWithAggregatesFilter<"TimeEntry"> | string | null
+    lastActivityAt?: DateTimeNullableWithAggregatesFilter<"TimeEntry"> | Date | string | null
     startedAt?: DateTimeWithAggregatesFilter<"TimeEntry"> | Date | string
     stoppedAt?: DateTimeNullableWithAggregatesFilter<"TimeEntry"> | Date | string | null
     durationSeconds?: IntWithAggregatesFilter<"TimeEntry"> | number
@@ -39226,6 +39264,8 @@ export namespace Prisma {
   export type TimeEntryCreateInput = {
     id?: string
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -39249,6 +39289,8 @@ export namespace Prisma {
     projectId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -39264,6 +39306,8 @@ export namespace Prisma {
   export type TimeEntryUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -39287,6 +39331,8 @@ export namespace Prisma {
     projectId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -39306,6 +39352,8 @@ export namespace Prisma {
     projectId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -39319,6 +39367,8 @@ export namespace Prisma {
   export type TimeEntryUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -39335,6 +39385,8 @@ export namespace Prisma {
     projectId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -41911,6 +41963,8 @@ export namespace Prisma {
     projectId?: SortOrder
     clientId?: SortOrder
     description?: SortOrder
+    deviceId?: SortOrder
+    lastActivityAt?: SortOrder
     startedAt?: SortOrder
     stoppedAt?: SortOrder
     durationSeconds?: SortOrder
@@ -41932,6 +41986,8 @@ export namespace Prisma {
     projectId?: SortOrder
     clientId?: SortOrder
     description?: SortOrder
+    deviceId?: SortOrder
+    lastActivityAt?: SortOrder
     startedAt?: SortOrder
     stoppedAt?: SortOrder
     durationSeconds?: SortOrder
@@ -41949,6 +42005,8 @@ export namespace Prisma {
     projectId?: SortOrder
     clientId?: SortOrder
     description?: SortOrder
+    deviceId?: SortOrder
+    lastActivityAt?: SortOrder
     startedAt?: SortOrder
     stoppedAt?: SortOrder
     durationSeconds?: SortOrder
@@ -46362,6 +46420,8 @@ export namespace Prisma {
   export type TimeEntryCreateWithoutAccountInput = {
     id?: string
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -46383,6 +46443,8 @@ export namespace Prisma {
     projectId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -47070,6 +47132,8 @@ export namespace Prisma {
     projectId?: StringFilter<"TimeEntry"> | string
     clientId?: StringNullableFilter<"TimeEntry"> | string | null
     description?: StringNullableFilter<"TimeEntry"> | string | null
+    deviceId?: StringNullableFilter<"TimeEntry"> | string | null
+    lastActivityAt?: DateTimeNullableFilter<"TimeEntry"> | Date | string | null
     startedAt?: DateTimeFilter<"TimeEntry"> | Date | string
     stoppedAt?: DateTimeNullableFilter<"TimeEntry"> | Date | string | null
     durationSeconds?: IntFilter<"TimeEntry"> | number
@@ -47596,6 +47660,8 @@ export namespace Prisma {
   export type TimeEntryCreateWithoutUserInput = {
     id?: string
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -47617,6 +47683,8 @@ export namespace Prisma {
     projectId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -48462,6 +48530,8 @@ export namespace Prisma {
   export type TimeEntryCreateWithoutClientInput = {
     id?: string
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -48483,6 +48553,8 @@ export namespace Prisma {
     userId: string
     projectId: string
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -49205,6 +49277,8 @@ export namespace Prisma {
   export type TimeEntryCreateWithoutProjectInput = {
     id?: string
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -49226,6 +49300,8 @@ export namespace Prisma {
     userId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -52870,6 +52946,8 @@ export namespace Prisma {
   export type TimeEntryCreateWithoutInvoiceInput = {
     id?: string
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -52892,6 +52970,8 @@ export namespace Prisma {
     projectId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -53255,6 +53335,8 @@ export namespace Prisma {
   export type TimeEntryCreateWithoutInvoiceItemsInput = {
     id?: string
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -53277,6 +53359,8 @@ export namespace Prisma {
     projectId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -53437,6 +53521,8 @@ export namespace Prisma {
   export type TimeEntryUpdateWithoutInvoiceItemsInput = {
     id?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -53459,6 +53545,8 @@ export namespace Prisma {
     projectId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -54990,6 +55078,8 @@ export namespace Prisma {
   export type TimeEntryCreateWithoutScreenshotsInput = {
     id?: string
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -55012,6 +55102,8 @@ export namespace Prisma {
     projectId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -55109,6 +55201,8 @@ export namespace Prisma {
   export type TimeEntryUpdateWithoutScreenshotsInput = {
     id?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -55131,6 +55225,8 @@ export namespace Prisma {
     projectId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -55211,6 +55307,8 @@ export namespace Prisma {
     projectId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -55625,6 +55723,8 @@ export namespace Prisma {
   export type TimeEntryUpdateWithoutAccountInput = {
     id?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -55646,6 +55746,8 @@ export namespace Prisma {
     projectId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -55664,6 +55766,8 @@ export namespace Prisma {
     projectId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -56199,6 +56303,8 @@ export namespace Prisma {
     projectId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -56315,6 +56421,8 @@ export namespace Prisma {
   export type TimeEntryUpdateWithoutUserInput = {
     id?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -56336,6 +56444,8 @@ export namespace Prisma {
     projectId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -56354,6 +56464,8 @@ export namespace Prisma {
     projectId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -56717,6 +56829,8 @@ export namespace Prisma {
     userId: string
     projectId: string
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -57051,6 +57165,8 @@ export namespace Prisma {
   export type TimeEntryUpdateWithoutClientInput = {
     id?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -57072,6 +57188,8 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     projectId?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -57090,6 +57208,8 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     projectId?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -57116,6 +57236,8 @@ export namespace Prisma {
     userId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -57228,6 +57350,8 @@ export namespace Prisma {
   export type TimeEntryUpdateWithoutProjectInput = {
     id?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -57249,6 +57373,8 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -57267,6 +57393,8 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -57746,6 +57874,8 @@ export namespace Prisma {
     projectId: string
     clientId?: string | null
     description?: string | null
+    deviceId?: string | null
+    lastActivityAt?: Date | string | null
     startedAt: Date | string
     stoppedAt?: Date | string | null
     durationSeconds?: number
@@ -57821,6 +57951,8 @@ export namespace Prisma {
   export type TimeEntryUpdateWithoutInvoiceInput = {
     id?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -57843,6 +57975,8 @@ export namespace Prisma {
     projectId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number
@@ -57861,6 +57995,8 @@ export namespace Prisma {
     projectId?: StringFieldUpdateOperationsInput | string
     clientId?: NullableStringFieldUpdateOperationsInput | string | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    deviceId?: NullableStringFieldUpdateOperationsInput | string | null
+    lastActivityAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     startedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     stoppedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     durationSeconds?: IntFieldUpdateOperationsInput | number

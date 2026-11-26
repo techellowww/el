@@ -203,6 +203,8 @@ exports.Prisma.TimeEntryScalarFieldEnum = {
   projectId: 'projectId',
   clientId: 'clientId',
   description: 'description',
+  deviceId: 'deviceId',
+  lastActivityAt: 'lastActivityAt',
   startedAt: 'startedAt',
   stoppedAt: 'stoppedAt',
   durationSeconds: 'durationSeconds',

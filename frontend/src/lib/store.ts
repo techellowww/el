@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { requestScreenStream, stopScreenStream, isScreenStreamActive, checkScreenFrameChanged } from './screenshotCapture';
+import { getClientDeviceId } from './deviceId';
 
 export interface AgencyBranding {
   name: string;
@@ -32,6 +33,8 @@ export interface ActiveTimerData {
   isOvertime?: boolean;
   targetDuration?: number | null;
   classification: string;
+  deviceId?: string | null;
+  lastActivityAt?: string | null;
   notes?: string | null;
   description?: string | null;
   project: {
@@ -217,6 +220,8 @@ export const useTimerStore = create<TimerState>((set, get) => ({
               isOutsideHours: isTimerOvertime,
               isOvertime: isTimerOvertime,
               classification: isTimerOvertime ? 'OVERTIME' : 'PROJECT_TRACKING',
+              deviceId: data.activeTimer.deviceId || null,
+              lastActivityAt: data.activeTimer.lastActivityAt || null,
               project: data.activeTimer.project,
               description: data.activeTimer.description,
             },
@@ -255,11 +260,12 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     const schedule = get().schedule;
     const isAfterHours = schedule ? checkIsAfterOfficeHours(schedule).isAfterHours : false;
     const isOvertime = typeof isOvertimeOrDuration === 'boolean' ? isOvertimeOrDuration : isAfterHours;
+    const deviceId = getClientDeviceId();
     try {
       const res = await fetch('/api/time', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'START', projectId, description: notes, isOvertime }),
+        body: JSON.stringify({ action: 'START', projectId, description: notes, isOvertime, deviceId }),
       });
       const data = await res.json();
 
@@ -277,6 +283,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
       if (typeof window !== 'undefined') {
         try {
+          localStorage.setItem('el_active_timer_device_id', deviceId);
           localStorage.setItem('el_last_activity_time', String(Date.now()));
         } catch {}
       }
@@ -290,6 +297,8 @@ export const useTimerStore = create<TimerState>((set, get) => ({
           isOutsideHours: isTimerOvertime,
           isOvertime: isTimerOvertime,
           classification: isTimerOvertime ? 'OVERTIME' : 'PROJECT_TRACKING',
+          deviceId: timer.deviceId || deviceId,
+          lastActivityAt: timer.lastActivityAt || new Date().toISOString(),
           project: timer.project,
           description: timer.description,
         },
@@ -315,6 +324,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       } catch {}
     }
     set({ isLoading: true, error: null });
+    const deviceId = getClientDeviceId();
     try {
       const res = await fetch('/api/time', {
         method: 'POST',
@@ -322,6 +332,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         body: JSON.stringify({
           action: 'STOP',
           description: notes,
+          deviceId,
           stoppedAt: stoppedAt ? new Date(stoppedAt).toISOString() : undefined,
         }),
       });
@@ -329,6 +340,12 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
       if (!res.ok) {
         set({ isLoading: false, error: data.error || 'Failed to stop timer' });
+        return false;
+      }
+
+      // If the server ignored an inactivity auto-cut because it was from another device, keep running
+      if (data.ignored) {
+        set({ isLoading: false, error: null });
         return false;
       }
 
@@ -371,22 +388,30 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       }
 
       // Rule 2: Inactivity auto-cutoff (15 minutes of zero keyboard or mouse movement)
+      // Multi-System / Multi-Device Protection:
+      // Inactivity auto-cutoff MUST ONLY RUN on the device that started the timer (the tracking host).
+      // Any secondary device (or browser session on another machine) is read-only and MUST NOT auto-cut!
       if (!get().isLoading && typeof window !== 'undefined') {
-        const isTesting =
-          window.location.search.includes('testIdle') ||
-          localStorage.getItem('el_test_idle') === 'true' ||
-          localStorage.getItem('el_test_idle') === '1';
-        const autocutLimit = isTesting ? 15 * 1000 : 15 * 60 * 1000;
-        if (elapsed * 1000 >= autocutLimit) {
-          const savedLastActivity = localStorage.getItem('el_last_activity_time');
-          if (savedLastActivity) {
-            const parsedLastAct = parseInt(savedLastActivity, 10);
-            if (!isNaN(parsedLastAct)) {
-              const effectiveLastAct = Math.max(parsedLastAct, startMs);
-              if (Date.now() - effectiveLastAct >= autocutLimit) {
-                const cutTime = new Date(effectiveLastAct + autocutLimit);
-                get().stopTimer('[Auto-stopped: 15 minutes of inactivity - no keyboard or mouse movement]', cutTime);
-                return;
+        const myDeviceId = getClientDeviceId();
+        const isHostingDevice = !active.deviceId || active.deviceId === myDeviceId;
+
+        if (isHostingDevice) {
+          const isTesting =
+            window.location.search.includes('testIdle') ||
+            localStorage.getItem('el_test_idle') === 'true' ||
+            localStorage.getItem('el_test_idle') === '1';
+          const autocutLimit = isTesting ? 15 * 1000 : 15 * 60 * 1000;
+          if (elapsed * 1000 >= autocutLimit) {
+            const savedLastActivity = localStorage.getItem('el_last_activity_time');
+            if (savedLastActivity) {
+              const parsedLastAct = parseInt(savedLastActivity, 10);
+              if (!isNaN(parsedLastAct)) {
+                const effectiveLastAct = Math.max(parsedLastAct, startMs);
+                if (Date.now() - effectiveLastAct >= autocutLimit) {
+                  const cutTime = new Date(effectiveLastAct + autocutLimit);
+                  get().stopTimer('[Auto-stopped: 15 minutes of inactivity - no keyboard or mouse movement]', cutTime);
+                  return;
+                }
               }
             }
           }

@@ -589,7 +589,7 @@ export default function DashboardPage() {
 
       {/* Auto-Stop Office Hours Alert Banner */}
       {recentEntries.length > 0 &&
-        recentEntries[0]?.description?.includes('[Auto-stopped:') &&
+        recentEntries[0]?.description?.includes('[Auto-stopped: Office hours') &&
         !activeTimer && (
           <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in shadow-xs">
             <div className="flex items-center gap-2.5">
