@@ -217,7 +217,7 @@ export function isOfficeTimeEnded(
     const currentMinutes = nHour * 60 + nMinute;
 
     if (closeMinutes > openMinutes) {
-      return currentMinutes >= closeMinutes || currentMinutes < openMinutes;
+      return currentMinutes >= closeMinutes;
     } else if (closeMinutes < openMinutes) {
       return currentMinutes >= closeMinutes && currentMinutes < openMinutes;
     }

@@ -401,9 +401,49 @@ export async function enforceOfficeCutoffForUser(userId: string) {
   const tz = schedule.timezone || 'Asia/Kolkata';
 
   for (const entry of runningEntries) {
+    // 1. If timer has [Overtime] in description, IT MUST RUN UNTIL MANUALLY STOPPED!
+    const isOvertimeTag = Boolean(entry.description && /\[Overtime\]/i.test(entry.description));
+
+    const openingTime = getOpeningTimeForDate(entry.startedAt, schedule);
     const closingTime = getClosingTimeForDate(entry.startedAt, schedule);
+    const [openH, openM] = openingTime.split(':').map(Number);
     const [closeH, closeM] = closingTime.split(':').map(Number);
+    const openMinutes = openH * 60 + openM;
     const closeMinutes = closeH * 60 + closeM;
+
+    const startZoned = toZonedTime(entry.startedAt, tz);
+    const startMinutes = startZoned.getHours() * 60 + startZoned.getMinutes();
+    const startDayOfWeek = formatInTimeZone(entry.startedAt, tz, 'EEE').toUpperCase();
+    const workingDays = (schedule.workingDays || 'MON,TUE,WED,THU,FRI').split(',').map((d) => d.trim().toUpperCase());
+
+    const isNonWorkingDay = !workingDays.includes(startDayOfWeek);
+    const isStartedAfterOfficeHours = isNonWorkingDay || (closeMinutes > openMinutes
+      ? (startMinutes >= closeMinutes || startMinutes < openMinutes)
+      : (startMinutes >= closeMinutes && startMinutes < openMinutes));
+
+    // Overtime rule: Any timer marked as Overtime or started after office hours runs until manually stopped!
+    if (isOvertimeTag || isStartedAfterOfficeHours) {
+      continue;
+    }
+
+    // Active session protection: If heartbeat or activity was recorded within the last 30 minutes,
+    // or if the timer was started less than 30 minutes ago, the user is actively working!
+    // Never auto-stop an active working session.
+    const rawLastActivity = (entry as any).lastActivityAt || (entry as any).updatedAt || entry.startedAt;
+    const effectiveLastActivity = rawLastActivity
+      ? new Date(rawLastActivity).getTime()
+      : new Date(entry.startedAt).getTime();
+    if (!isNaN(effectiveLastActivity) && now.getTime() - effectiveLastActivity < 30 * 60 * 1000) {
+      continue;
+    }
+
+    const startMs = new Date(entry.startedAt).getTime();
+    const elapsedSeconds = Math.max(0, Math.round((now.getTime() - startMs) / 1000));
+
+    // Never auto-stop a timer that was just started (under 60 seconds)
+    if (elapsedSeconds < 60) {
+      continue;
+    }
 
     const currentZoned = toZonedTime(now, tz);
     const curMinutes = currentZoned.getHours() * 60 + currentZoned.getMinutes();
@@ -414,15 +454,12 @@ export async function enforceOfficeCutoffForUser(userId: string) {
     const hasOfficeEnded = startDayStr !== currentDayStr || curMinutes >= closeMinutes;
 
     if (hasOfficeEnded) {
-      const startMs = new Date(entry.startedAt).getTime();
-      const elapsedSeconds = Math.max(1, Math.round((now.getTime() - startMs) / 1000));
-
       await prisma.timeEntry.update({
         where: { id: entry.id },
         data: {
           isRunning: false,
           stoppedAt: now,
-          durationSeconds: elapsedSeconds,
+          durationSeconds: Math.max(1, elapsedSeconds),
           description: (entry.description ? entry.description + ' ' : '') + `[Auto-stopped: Office hours ended at ${closingTime}]`,
         },
       });
@@ -463,9 +500,49 @@ export async function enforceGlobalOfficeCutoffs() {
   const tz = schedule.timezone || 'Asia/Kolkata';
 
   for (const entry of runningEntries) {
+    // 1. If timer has [Overtime] in description, IT MUST RUN UNTIL MANUALLY STOPPED!
+    const isOvertimeTag = Boolean(entry.description && /\[Overtime\]/i.test(entry.description));
+
+    const openingTime = getOpeningTimeForDate(entry.startedAt, schedule);
     const closingTime = getClosingTimeForDate(entry.startedAt, schedule);
+    const [openH, openM] = openingTime.split(':').map(Number);
     const [closeH, closeM] = closingTime.split(':').map(Number);
+    const openMinutes = openH * 60 + openM;
     const closeMinutes = closeH * 60 + closeM;
+
+    const startZoned = toZonedTime(entry.startedAt, tz);
+    const startMinutes = startZoned.getHours() * 60 + startZoned.getMinutes();
+    const startDayOfWeek = formatInTimeZone(entry.startedAt, tz, 'EEE').toUpperCase();
+    const workingDays = (schedule.workingDays || 'MON,TUE,WED,THU,FRI').split(',').map((d) => d.trim().toUpperCase());
+
+    const isNonWorkingDay = !workingDays.includes(startDayOfWeek);
+    const isStartedAfterOfficeHours = isNonWorkingDay || (closeMinutes > openMinutes
+      ? (startMinutes >= closeMinutes || startMinutes < openMinutes)
+      : (startMinutes >= closeMinutes && startMinutes < openMinutes));
+
+    // Overtime rule: Any timer marked as Overtime or started after office hours runs until manually stopped!
+    if (isOvertimeTag || isStartedAfterOfficeHours) {
+      continue;
+    }
+
+    // Active session protection: If heartbeat or activity was recorded within the last 30 minutes,
+    // or if the timer was started less than 30 minutes ago, the user is actively working!
+    // Never auto-stop an active working session.
+    const rawLastActivity = (entry as any).lastActivityAt || (entry as any).updatedAt || entry.startedAt;
+    const effectiveLastActivity = rawLastActivity
+      ? new Date(rawLastActivity).getTime()
+      : new Date(entry.startedAt).getTime();
+    if (!isNaN(effectiveLastActivity) && now.getTime() - effectiveLastActivity < 30 * 60 * 1000) {
+      continue;
+    }
+
+    const startMs = new Date(entry.startedAt).getTime();
+    const elapsedSeconds = Math.max(0, Math.round((now.getTime() - startMs) / 1000));
+
+    // Never auto-stop a timer that was just started (under 60 seconds)
+    if (elapsedSeconds < 60) {
+      continue;
+    }
 
     const currentZoned = toZonedTime(now, tz);
     const curMinutes = currentZoned.getHours() * 60 + currentZoned.getMinutes();
@@ -476,15 +553,12 @@ export async function enforceGlobalOfficeCutoffs() {
     const hasOfficeEnded = startDayStr !== currentDayStr || curMinutes >= closeMinutes;
 
     if (hasOfficeEnded) {
-      const startMs = new Date(entry.startedAt).getTime();
-      const elapsedSeconds = Math.max(1, Math.round((now.getTime() - startMs) / 1000));
-
       await prisma.timeEntry.update({
         where: { id: entry.id },
         data: {
           isRunning: false,
           stoppedAt: now,
-          durationSeconds: elapsedSeconds,
+          durationSeconds: Math.max(1, elapsedSeconds),
           description: (entry.description ? entry.description + ' ' : '') + `[Auto-stopped: Office hours ended at ${closingTime}]`,
         },
       });

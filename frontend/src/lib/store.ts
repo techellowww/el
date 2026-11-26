@@ -368,25 +368,6 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       const startMs = new Date(active.startTime).getTime();
       const nowMs = Date.now() + (get().serverOffset || 0);
       const elapsed = Math.max(0, Math.floor((nowMs - startMs) / 1000));
-
-      const schedule = get().schedule;
-      const isOvertime = Boolean(
-        active.isOvertime ||
-        (active.description && /\[Overtime\]/i.test(active.description))
-      );
-
-      // Rule 1: If timer is running and office time is ended, and if checkbox is checked (autoCutoffEnabled),
-      // stop daytime timers automatically. Overtime timers run until manually stopped!
-      // Never auto-stop a timer that has been running for less than 60 seconds.
-      if (schedule && schedule.autoCutoffEnabled && !isOvertime && !get().isLoading && elapsed >= 60) {
-        const ended = isOfficeTimeEnded(schedule, active.startTime, active.description);
-        if (ended) {
-          const closing = schedule.closingTime || 'closing time';
-          get().stopTimer(`[Auto-stopped: Office hours ended at ${closing}]`);
-          return;
-        }
-      }
-
       set({ elapsedSeconds: elapsed });
     }
   },
