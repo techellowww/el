@@ -370,29 +370,13 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         }
       }
 
-      // Rule 2: Inactivity auto-cutoff (15 minutes of no keyboard or mouse movement)
-      // Never auto-stop if elapsed running time is less than autocutLimit
+      // Rule 2: Inactivity auto-cutoff (15 minutes of zero keyboard or mouse movement)
       if (!get().isLoading && typeof window !== 'undefined') {
-        const isTesting = window.location.search.includes('testIdle=1');
+        const isTesting =
+          window.location.search.includes('testIdle') ||
+          localStorage.getItem('el_test_idle') === 'true' ||
+          localStorage.getItem('el_test_idle') === '1';
         const autocutLimit = isTesting ? 15 * 1000 : 15 * 60 * 1000;
-
-        // Active screen stream verification: if workstation screen frames are changing, user is active!
-        if (isScreenStreamActive()) {
-          try {
-            if (checkScreenFrameChanged()) {
-              localStorage.setItem('el_last_activity_time', String(Date.now()));
-              set({ elapsedSeconds: elapsed });
-              return;
-            }
-          } catch { }
-        }
-
-        // If tab is in background while user works in other desktop applications, do not auto-cut
-        if (typeof document !== 'undefined' && document.hidden) {
-          set({ elapsedSeconds: elapsed });
-          return;
-        }
-
         if (elapsed * 1000 >= autocutLimit) {
           const savedLastActivity = localStorage.getItem('el_last_activity_time');
           if (savedLastActivity) {

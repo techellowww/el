@@ -482,10 +482,25 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   };
 
   const getInactivityThresholds = () => {
-    const isTesting = typeof window !== 'undefined' && window.location.search.includes('testIdle=1');
+    if (typeof window === 'undefined') {
+      return { warnMs: 10 * 60 * 1000, autoCutMs: 15 * 60 * 1000 };
+    }
+    const params = new URLSearchParams(window.location.search);
+    const customIdle = parseInt(params.get('idle') || params.get('idleSec') || '', 10);
+    if (!isNaN(customIdle) && customIdle > 0) {
+      return {
+        warnMs: customIdle * 1000,
+        autoCutMs: (customIdle + 30) * 1000,
+      };
+    }
+    const isTesting =
+      window.location.search.includes('testIdle') ||
+      localStorage.getItem('el_test_idle') === 'true' ||
+      localStorage.getItem('el_test_idle') === '1';
+
     return {
-      warnMs: isTesting ? 10 * 1000 : 10 * 60 * 1000, // 10 minutes warning (or 10s test)
-      autoCutMs: isTesting ? 15 * 1000 : 15 * 60 * 1000, // 15 minutes auto-cut (or 15s test)
+      warnMs: isTesting ? 10 * 1000 : 10 * 60 * 1000, // 10s in test mode, 10 min in normal mode
+      autoCutMs: isTesting ? 15 * 1000 : 15 * 60 * 1000,
     };
   };
 
@@ -628,32 +643,12 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       const { warnMs, autoCutMs } = getInactivityThresholds();
 
       // Guard: An active timer cannot be inactive longer than its total elapsed running time!
-      // If the timer has only been running for less than warnMs, it must never show warning or auto-cut.
+      // If the timer has only been running for less than warnMs, it must never show warning.
       if (elapsedMs < warnMs) {
         showIdleWarningRef.current = false;
         setShowIdleWarning(false);
         idleWarningSoundPlayedRef.current = false;
         return;
-      }
-
-      // Check live screen display changes:
-      // When screen sharing is active, changes in pixels (mouse moves, typing, scrolling in any app)
-      // verify that the employee is actively working on their workstation!
-      if (isScreenStreamActive()) {
-        try {
-          if (checkScreenFrameChanged()) {
-            lastActivityTimeRef.current = now;
-            try {
-              localStorage.setItem('el_last_activity_time', String(now));
-            } catch { }
-            if (showIdleWarningRef.current) {
-              showIdleWarningRef.current = false;
-              setShowIdleWarning(false);
-              idleWarningSoundPlayedRef.current = false;
-            }
-            return;
-          }
-        } catch { }
       }
 
       // Sync latest timestamp from localStorage in case another tab recorded activity
@@ -667,19 +662,13 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
         }
       } catch { }
 
-      // If document is in the background (user is working in VS Code, terminal, or another window),
-      // do not auto-cut active work session.
-      if (typeof document !== 'undefined' && document.hidden) {
-        return;
-      }
-
       if (lastActivityTimeRef.current < validStart) {
         lastActivityTimeRef.current = validStart;
       }
 
       const idleMs = Math.min(now - lastActivityTimeRef.current, elapsedMs);
 
-      // Auto-cut when inactivity reaches 15 minutes (or 10-15 min window expires)
+      // Inactivity lifecycle: Warning at 10 minutes, Auto-cut at 15 minutes of zero movement
       if (idleMs >= autoCutMs) {
         performAutoCut();
       } else if (idleMs >= warnMs) {
@@ -702,19 +691,9 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     // Check every second continuously
     const interval = setInterval(checkInactivity, 1000);
 
-    // Returning to the tab or focusing the window is affirmative user activity!
-    // Immediately record active presence and dismiss any pending idle warning.
+    // Recheck inactivity immediately upon returning to or focusing the window
     const onWakeOrFocus = () => {
-      const now = Date.now();
-      lastActivityTimeRef.current = now;
-      try {
-        localStorage.setItem('el_last_activity_time', String(now));
-      } catch { }
-      if (showIdleWarningRef.current) {
-        showIdleWarningRef.current = false;
-        setShowIdleWarning(false);
-        idleWarningSoundPlayedRef.current = false;
-      }
+      checkInactivity();
       if (isScreenStreamActive()) {
         setIsScreenSharing(true);
         ensureVideoPlaying();
