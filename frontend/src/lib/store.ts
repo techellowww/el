@@ -387,37 +387,6 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         }
       }
 
-      // Rule 2: Inactivity auto-cutoff (15 minutes of zero keyboard or mouse movement)
-      // Multi-System / Multi-Device Protection:
-      // Inactivity auto-cutoff MUST ONLY RUN on the device that started the timer (the tracking host).
-      // Any secondary device (or browser session on another machine) is read-only and MUST NOT auto-cut!
-      if (!get().isLoading && typeof window !== 'undefined') {
-        const myDeviceId = getClientDeviceId();
-        const isHostingDevice = !active.deviceId || active.deviceId === myDeviceId;
-
-        if (isHostingDevice) {
-          const isTesting =
-            window.location.search.includes('testIdle') ||
-            localStorage.getItem('el_test_idle') === 'true' ||
-            localStorage.getItem('el_test_idle') === '1';
-          const autocutLimit = isTesting ? 15 * 1000 : 15 * 60 * 1000;
-          if (elapsed * 1000 >= autocutLimit) {
-            const savedLastActivity = localStorage.getItem('el_last_activity_time');
-            if (savedLastActivity) {
-              const parsedLastAct = parseInt(savedLastActivity, 10);
-              if (!isNaN(parsedLastAct)) {
-                const effectiveLastAct = Math.max(parsedLastAct, startMs);
-                if (Date.now() - effectiveLastAct >= autocutLimit) {
-                  const cutTime = new Date(effectiveLastAct + autocutLimit);
-                  get().stopTimer('[Auto-stopped: 15 minutes of inactivity - no keyboard or mouse movement]', cutTime);
-                  return;
-                }
-              }
-            }
-          }
-        }
-      }
-
       set({ elapsedSeconds: elapsed });
     }
   },

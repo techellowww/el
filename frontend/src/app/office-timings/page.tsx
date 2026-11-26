@@ -490,7 +490,7 @@ export default function OfficeTimingsPage() {
               </div>
             </div>
 
-            {/* Keyboard & Mouse Inactivity Auto-Cut Container */}
+            {/* Continuous Tracking Notice Container */}
             <div className="flex items-start gap-3.5 p-4 bg-slate-50 rounded-xl border border-border">
               <div className="mt-1 w-4 h-4 text-primary flex items-center justify-center shrink-0">
                 <Activity className="w-4 h-4 text-primary" />
@@ -498,15 +498,15 @@ export default function OfficeTimingsPage() {
               <div className="flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="card-title text-text-primary block">
-                    Keyboard &amp; Mouse Inactivity Auto-Cut
+                    Continuous Multi-Window Tracking
                   </span>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-green-50 text-success border-green-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
-                    Active (10-15 Min)
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-blue-50 text-blue-700 border-blue-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                    Continuous Mode
                   </span>
                 </div>
                 <p className="helper-text text-text-secondary mt-1 leading-relaxed">
-                  Automatically monitors user activity during running timers. If no keyboard or mouse movement is detected for 10 minutes, a warning alert is prompted. If inactivity continues up to 15 minutes, the timer is automatically cut off to prevent unmonitored abandoned sessions.
+                  Active timers remain running continuously while working across other applications and windows. Timers are not cut off due to tab inactivity, running uninhibited until office hours end or stopped manually.
                 </p>
               </div>
             </div>

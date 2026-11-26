@@ -29,7 +29,6 @@ import {
   Menu,
   X,
   Square,
-  AlertTriangle,
   Camera,
   Mail,
   History,
@@ -171,18 +170,6 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   // Track previous active timer ID to detect a new timer start
   const prevTimerIdRef = useRef<string | null>(null);
 
-  // 10 to 15 min no movement on keyboard or mouse - autocut active timer
-  const [showIdleWarning, setShowIdleWarning] = useState(false);
-  const showIdleWarningRef = useRef<boolean>(false);
-  useEffect(() => {
-    showIdleWarningRef.current = showIdleWarning;
-  }, [showIdleWarning]);
-
-  const [idleSecondsRemaining, setIdleSecondsRemaining] = useState<number>(300);
-  const [showIdleStoppedModal, setShowIdleStoppedModal] = useState(false);
-  const lastActivityTimeRef = useRef<number>(Date.now());
-  const idleWarningSoundPlayedRef = useRef<boolean>(false);
-  const isAutoStoppingRef = useRef<boolean>(false);
   const lastHeartbeatRef = useRef<number>(0);
 
   // Keep screen sharing status in sync with active timer
@@ -464,119 +451,24 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     return () => clearInterval(syncInterval);
   }, [user, syncActiveTimer]);
 
-  const playIdleChime = () => {
-    try {
-      if (typeof window === 'undefined') return;
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(659.25, ctx.currentTime);
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.6);
-    } catch { }
-  };
+  // Periodic heartbeat to keep server session active while timer is running across all windows & apps
+  useEffect(() => {
+    if (!activeTimer) return;
+    const interval = setInterval(() => {
+      fetch('/api/time', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'HEARTBEAT' }),
+      }).catch(() => {});
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [activeTimer?.id]);
 
-  const getInactivityThresholds = () => {
-    if (typeof window === 'undefined') {
-      return { warnMs: 10 * 60 * 1000, autoCutMs: 15 * 60 * 1000 };
-    }
-    const params = new URLSearchParams(window.location.search);
-    const customIdle = parseInt(params.get('idle') || params.get('idleSec') || '', 10);
-    if (!isNaN(customIdle) && customIdle > 0) {
-      return {
-        warnMs: customIdle * 1000,
-        autoCutMs: (customIdle + 30) * 1000,
-      };
-    }
-    const isTesting =
-      window.location.search.includes('testIdle') ||
-      localStorage.getItem('el_test_idle') === 'true' ||
-      localStorage.getItem('el_test_idle') === '1';
-
-    return {
-      warnMs: isTesting ? 10 * 1000 : 10 * 60 * 1000, // 10s in test mode, 10 min in normal mode
-      autoCutMs: isTesting ? 15 * 1000 : 15 * 60 * 1000,
-    };
-  };
-
-  const handleKeepTimerRunning = () => {
-    const now = Date.now();
-    lastActivityTimeRef.current = now;
-    try {
-      localStorage.setItem('el_last_activity_time', String(now));
-    } catch { }
-    idleWarningSoundPlayedRef.current = false;
-    showIdleWarningRef.current = false;
-    setShowIdleWarning(false);
-
-    // Keep screen sharing active throughout active session
-    if (isScreenStreamActive()) {
-      setIsScreenSharing(true);
-      ensureVideoPlaying();
-    }
-  };
-
-  const performAutoCut = async () => {
-    if (isAutoStoppingRef.current || !activeTimer) return;
-
-    // Multi-System Protection: Only the host device where the timer is running is permitted to auto-cut
-    const myDeviceId = getClientDeviceId();
-    const isHostingDevice = !activeTimer.deviceId || activeTimer.deviceId === myDeviceId;
-    if (!isHostingDevice) {
-      showIdleWarningRef.current = false;
-      setShowIdleWarning(false);
-      return;
-    }
-
-    isAutoStoppingRef.current = true;
-    showIdleWarningRef.current = false;
-    setShowIdleWarning(false);
-    idleWarningSoundPlayedRef.current = false;
-
-    const { autoCutMs } = getInactivityThresholds();
-    const effectiveCutoffTime = new Date(lastActivityTimeRef.current + autoCutMs);
-
-    try {
-      const autoCutNote = '[Auto-stopped: 15 minutes of inactivity - no keyboard or mouse movement]';
-      const ok = await stopTimer(autoCutNote, effectiveCutoffTime);
-      if (ok) {
-        setShowIdleStoppedModal(true);
-      }
-    } catch (err) {
-      console.error('[InactivityAutoCut] Error executing stopTimer:', err);
-    } finally {
-      isAutoStoppingRef.current = false;
-      const now = Date.now();
-      lastActivityTimeRef.current = now;
-      try {
-        localStorage.setItem('el_last_activity_time', String(now));
-      } catch { }
-    }
-  };
-
-  // Track user activity via keyboard, mouse, touch, cross-tab storage, and live screen frame changes
+  // Track user activity to maintain screen sharing and touch activity timestamps
   useEffect(() => {
     let lastThrottled = 0;
     const handleUserActivity = () => {
       const now = Date.now();
-
-      // Any mouse/keyboard movement immediately resumes active session, dismisses idle warning,
-      // and guarantees screen sharing remains ON!
-      if (showIdleWarningRef.current) {
-        showIdleWarningRef.current = false;
-        setShowIdleWarning(false);
-        idleWarningSoundPlayedRef.current = false;
-      }
-
-      lastActivityTimeRef.current = now;
-
       if (now - lastThrottled > 1000) {
         lastThrottled = now;
         try {
@@ -589,7 +481,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
           ensureVideoPlaying();
         }
 
-        // Periodically send activity heartbeat to backend every 60 seconds
+        // Periodically send activity heartbeat to backend
         if (now - lastHeartbeatRef.current > 60000 && activeTimer) {
           lastHeartbeatRef.current = now;
           fetch('/api/time', {
@@ -601,150 +493,24 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Cross-tab synchronization: If employee interacts with another tab or window, sync activity
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'el_last_activity_time' && e.newValue) {
-        const parsed = parseInt(e.newValue, 10);
-        if (!isNaN(parsed) && parsed > lastActivityTimeRef.current) {
-          lastActivityTimeRef.current = parsed;
-          if (showIdleWarningRef.current) {
-            showIdleWarningRef.current = false;
-            setShowIdleWarning(false);
-            idleWarningSoundPlayedRef.current = false;
-          }
-        }
-      }
-    };
-
     const events = ['mousemove', 'mousedown', 'keydown', 'keypress', 'wheel', 'scroll', 'touchstart', 'pointerdown'];
     events.forEach((ev) => window.addEventListener(ev, handleUserActivity, { passive: true }));
-    window.addEventListener('storage', handleStorageChange);
 
-    try {
-      const now = Date.now();
-      const startMs = activeTimer ? new Date(activeTimer.startTime).getTime() : now;
-      const validStart = !isNaN(startMs) ? startMs : now;
-      const saved = localStorage.getItem('el_last_activity_time');
-      if (saved) {
-        const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed >= validStart && parsed <= now) {
-          lastActivityTimeRef.current = parsed;
-        } else {
-          lastActivityTimeRef.current = Math.max(validStart, now);
-          localStorage.setItem('el_last_activity_time', String(lastActivityTimeRef.current));
-        }
-      } else {
-        lastActivityTimeRef.current = Math.max(validStart, now);
-        localStorage.setItem('el_last_activity_time', String(lastActivityTimeRef.current));
-      }
-    } catch { }
-
-    return () => {
-      events.forEach((ev) => window.removeEventListener(ev, handleUserActivity));
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [activeTimer?.id]);
-
-  // 10 to 15 min no movement on keyboard or mouse - autocut active timer
-  useEffect(() => {
-    if (!activeTimer) {
-      setShowIdleWarning(false);
-      idleWarningSoundPlayedRef.current = false;
-      isAutoStoppingRef.current = false;
-      return;
-    }
-
-    const checkInactivity = () => {
-      if (!activeTimer || isAutoStoppingRef.current) return;
-
-      // Multi-System / Multi-Device Protection:
-      // If the timer was started on another system or device, THIS system is an observer.
-      // It MUST NOT show the idle warning modal and MUST NOT auto-cut the timer!
-      const myDeviceId = getClientDeviceId();
-      const isHostingDevice = !activeTimer.deviceId || activeTimer.deviceId === myDeviceId;
-      if (!isHostingDevice) {
-        if (showIdleWarningRef.current) {
-          showIdleWarningRef.current = false;
-          setShowIdleWarning(false);
-          idleWarningSoundPlayedRef.current = false;
-        }
-        return;
-      }
-
-      const now = Date.now();
-      const startMs = new Date(activeTimer.startTime).getTime();
-      const validStart = !isNaN(startMs) ? startMs : now;
-      const elapsedMs = Math.max(0, now - validStart);
-
-      const { warnMs, autoCutMs } = getInactivityThresholds();
-
-      // Guard: An active timer cannot be inactive longer than its total elapsed running time!
-      // If the timer has only been running for less than warnMs, it must never show warning.
-      if (elapsedMs < warnMs) {
-        showIdleWarningRef.current = false;
-        setShowIdleWarning(false);
-        idleWarningSoundPlayedRef.current = false;
-        return;
-      }
-
-      // Sync latest timestamp from localStorage in case another tab recorded activity
-      try {
-        const saved = localStorage.getItem('el_last_activity_time');
-        if (saved) {
-          const parsed = parseInt(saved, 10);
-          if (!isNaN(parsed) && parsed > lastActivityTimeRef.current && parsed <= now) {
-            lastActivityTimeRef.current = parsed;
-          }
-        }
-      } catch { }
-
-      if (lastActivityTimeRef.current < validStart) {
-        lastActivityTimeRef.current = validStart;
-      }
-
-      const idleMs = Math.min(now - lastActivityTimeRef.current, elapsedMs);
-
-      // Inactivity lifecycle: Warning at 10 minutes, Auto-cut at 15 minutes of zero movement
-      if (idleMs >= autoCutMs) {
-        performAutoCut();
-      } else if (idleMs >= warnMs) {
-        // Warning at 10 minutes: Countdown to 15 minutes
-        const remaining = Math.max(0, Math.ceil((autoCutMs - idleMs) / 1000));
-        setIdleSecondsRemaining(remaining);
-        if (!idleWarningSoundPlayedRef.current) {
-          playIdleChime();
-          idleWarningSoundPlayedRef.current = true;
-        }
-        showIdleWarningRef.current = true;
-        setShowIdleWarning(true);
-      } else {
-        showIdleWarningRef.current = false;
-        setShowIdleWarning(false);
-        idleWarningSoundPlayedRef.current = false;
-      }
-    };
-
-    // Check every second continuously
-    const interval = setInterval(checkInactivity, 1000);
-
-    // Recheck inactivity immediately upon returning to or focusing the window
     const onWakeOrFocus = () => {
-      checkInactivity();
       if (isScreenStreamActive()) {
         setIsScreenSharing(true);
         ensureVideoPlaying();
       }
     };
-
     window.addEventListener('visibilitychange', onWakeOrFocus);
     window.addEventListener('focus', onWakeOrFocus);
 
     return () => {
-      clearInterval(interval);
+      events.forEach((ev) => window.removeEventListener(ev, handleUserActivity));
       window.removeEventListener('visibilitychange', onWakeOrFocus);
       window.removeEventListener('focus', onWakeOrFocus);
     };
-  }, [activeTimer?.id, activeTimer?.deviceId, stopTimer]);
+  }, [activeTimer?.id]);
 
   useEffect(() => {
     setCurrentDateStr(
@@ -1526,104 +1292,6 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
 
       {/* Floating Chat Quick Action Button */}
       <FloatingChatButton />
-
-      {/* 10-15 Min Inactivity Warning Modal */}
-      {showIdleWarning && activeTimer && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl border border-amber-200 max-w-md w-full p-6 space-y-4">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 animate-bounce" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-base font-bold text-text-primary">
-                  Inactivity Detected (No Movement)
-                </h3>
-                <p className="text-xs text-text-secondary mt-1">
-                  No keyboard or mouse movement has been detected for <strong>10 minutes</strong> while your timer is running on <strong>{activeTimer.project.name}</strong>.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 text-center">
-              <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider block mb-1">
-                Timer Auto-Cut Countdown
-              </span>
-              <div className="font-mono text-2xl font-black text-amber-700 tracking-wider">
-                {Math.floor(idleSecondsRemaining / 60)}:
-                {String(idleSecondsRemaining % 60).padStart(2, '0')}
-              </div>
-              <p className="text-[11px] text-amber-700 mt-1">
-                Timer will automatically cut off at 15 minutes of inactivity.
-              </p>
-            </div>
-
-            <p className="text-xs text-slate-500 text-center">
-              Moving your mouse, pressing any key, or clicking below will immediately resume your timer.
-            </p>
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                id="btn-keep-timer-running"
-                data-testid="btn-keep-timer-running"
-                onClick={handleKeepTimerRunning}
-                className="w-full py-2.5 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-xs transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-              >
-                <span>I&apos;m Still Working (Keep Running)</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Inactivity Auto-Cut Notification Modal */}
-      {showIdleStoppedModal && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowIdleStoppedModal(false);
-          }}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl border border-red-200 max-w-md w-full p-6 space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 text-red-600 flex items-center justify-center shrink-0">
-                <Clock className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-base font-bold text-text-primary">
-                  Timer Automatically Stopped
-                </h3>
-                <p className="text-xs text-text-secondary mt-1">
-                  Your timer was automatically cut off because no keyboard or mouse movement was detected for <strong>15 minutes</strong>.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-50 border border-border text-xs text-text-secondary">
-              The idle period has been logged with note:
-              <span className="font-mono text-slate-700 block mt-1 bg-white p-2 rounded border border-border">
-                [Auto-stopped: 15 minutes of inactivity - no keyboard or mouse movement]
-              </span>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                id="btn-dismiss-idle-stopped"
-                data-testid="btn-dismiss-idle-stopped"
-                onClick={() => setShowIdleStoppedModal(false)}
-                className="w-full sm:w-auto px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition cursor-pointer"
-              >
-                Acknowledge
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Slack-style Edit Profile Modal */}
       <EditProfileModal
