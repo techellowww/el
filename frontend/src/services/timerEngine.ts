@@ -449,15 +449,6 @@ export async function enforceOfficeCutoffForUser(userId: string) {
       continue;
     }
 
-    // Active session protection: If heartbeat or activity was recorded within the last 30 minutes,
-    // or if the timer was started less than 30 minutes ago, the user is actively working!
-    // Never auto-stop an active working session.
-    const effectiveLastActivity = entry.lastActivityAt
-      ? new Date(entry.lastActivityAt).getTime()
-      : new Date(entry.startedAt).getTime();
-    if (!isNaN(effectiveLastActivity) && now.getTime() - effectiveLastActivity < 30 * 60 * 1000) {
-      continue;
-    }
 
     // 2. Daytime timer: Check if office closing time has been reached
     const startMs = new Date(entry.startedAt).getTime();
@@ -548,15 +539,6 @@ export async function enforceGlobalOfficeCutoffs() {
       continue;
     }
 
-    // Active session protection: If heartbeat or activity was recorded within the last 30 minutes,
-    // or if the timer was started less than 30 minutes ago, the user is actively working!
-    // Never auto-stop an active working session.
-    const effectiveLastActivity = entry.lastActivityAt
-      ? new Date(entry.lastActivityAt).getTime()
-      : new Date(entry.startedAt).getTime();
-    if (!isNaN(effectiveLastActivity) && now.getTime() - effectiveLastActivity < 30 * 60 * 1000) {
-      continue;
-    }
 
     const startMs = new Date(entry.startedAt).getTime();
     const elapsedSeconds = Math.max(0, Math.round((now.getTime() - startMs) / 1000));
