@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useTimerStore } from '@/lib/store';
 import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
@@ -33,6 +33,9 @@ export default function LoginPage() {
       }
 
       setUser(data.user, data.token);
+      try {
+        useTimerStore.getState().syncActiveTimer();
+      } catch {}
       router.push('/dashboard');
     } catch {
       setError('Connection error. Please try again.');

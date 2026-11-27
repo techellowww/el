@@ -431,6 +431,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
       });
     } else if (user) {
       userFetchAttemptedRef.current = false;
+      syncActiveTimer();
     }
   }, [user, fetchUser, pathname, router, syncActiveTimer, isPublicRoute, isLoggingOut]);
 

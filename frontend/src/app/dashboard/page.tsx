@@ -41,12 +41,12 @@ function DashboardTodayLoggedTime({ baseEntriesSeconds, hasActiveTimer }: { base
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
-  const { activeTimer, schedule, startTimer, stopTimer, error: timerStoreError } = useTimerStore();
+  const { activeTimer, schedule, syncActiveTimer, startTimer, stopTimer, error: timerStoreError } = useTimerStore();
 
   const cachedProjects = getCachedData<{ projects: any[] }>("/api/projects")?.projects;
   const [clients, setClients] = useState<any[]>(() => getCachedData<{ clients: any[] }>("/api/clients")?.clients || []);
   const [projects, setProjects] = useState<any[]>(() => cachedProjects || []);
-  const [recentEntries, setRecentEntries] = useState<any[]>(() => getCachedData<{ entries: any[] }>("/api/time")?.entries || []);
+  const [recentEntries, setRecentEntries] = useState<any[]>([]);
   const [unpaidInvoices, setUnpaidInvoices] = useState<any[]>([]);
   const [pendingProposals, setPendingProposals] = useState<any[]>(() => getCachedData<{ proposals: any[] }>("/api/proposals")?.proposals || []);
   const [failedAlerts, setFailedAlerts] = useState<any[]>([]);
@@ -55,7 +55,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(() => !cachedProjects);
 
   // Quick timer start states
-  const [quickProjectId, setQuickProjectId] = useState<string>("");
+  const [quickProjectId, setQuickProjectId] = useState<string>(() => cachedProjects?.[0]?.id || "");
   const [quickTaskDesc, setQuickTaskDesc] = useState<string>("");
   const [isStartingTimer, setIsStartingTimer] = useState<boolean>(false);
   const [timerActionError, setTimerActionError] = useState<string | null>(null);
@@ -64,6 +64,11 @@ export default function DashboardPage() {
   const afterHoursInfo = checkIsAfterOfficeHours(schedule);
   const isAfterHours = afterHoursInfo.isAfterHours;
 
+  // Immediately synchronize active timer state from server on dashboard mount
+  useEffect(() => {
+    syncActiveTimer();
+  }, [syncActiveTimer]);
+
   useEffect(() => {
     async function loadDashboard() {
       try {
@@ -71,7 +76,7 @@ export default function DashboardPage() {
         const [cData, pData, tData, iData, prData, aData] = await Promise.all([
           cachedFetch<{ clients: any[] }>("/api/clients").catch(() => ({ clients: [] })),
           cachedFetch<{ projects: any[] }>("/api/projects").catch(() => ({ projects: [] })),
-          cachedFetch<{ entries: any[] }>("/api/time").catch(() => ({ entries: [] })),
+          fetch("/api/time").then((r) => (r.ok ? r.json() : { entries: [] })).catch(() => ({ entries: [] })),
           isAdminUser ? cachedFetch<{ invoices: any[] }>("/api/invoices?status=SENT").catch(() => ({ invoices: [] })) : Promise.resolve({ invoices: [] }),
           isAdminUser ? cachedFetch<{ proposals: any[] }>("/api/proposals?status=SENT").catch(() => ({ proposals: [] })) : Promise.resolve({ proposals: [] }),
           isAdminUser ? cachedFetch<{ alerts: any[] }>("/api/notifications/alerts").catch(() => ({ alerts: [] })) : Promise.resolve({ alerts: [] }),
@@ -95,7 +100,7 @@ export default function DashboardPage() {
     }
 
     loadDashboard();
-  }, [activeTimer?.id]);
+  }, [activeTimer?.id, user?.id, user?.role]);
 
   const handleRetryAlerts = async () => {
     setIsRetryingAlerts(true);
@@ -136,9 +141,6 @@ export default function DashboardPage() {
 
   const handleStartQuickTimer = async (e?: React.FormEvent, forceOvertime?: boolean) => {
     if (e) e.preventDefault();
-    if (typeof window !== 'undefined' && !isScreenStreamActive()) {
-      try { await requestScreenStream(); } catch {}
-    }
     if (!quickProjectId) {
       setTimerActionError("Please select a project to start tracking time.");
       return;
@@ -171,9 +173,6 @@ export default function DashboardPage() {
   };
 
   const handleStartProjectTimer = async (projectId: string, projectName: string, forceOvertime?: boolean) => {
-    if (typeof window !== 'undefined' && !isScreenStreamActive()) {
-      try { await requestScreenStream(); } catch {}
-    }
     setIsStartingTimer(true);
     setTimerActionError(null);
     try {

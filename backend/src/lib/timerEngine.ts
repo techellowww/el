@@ -438,10 +438,15 @@ export async function enforceOfficeCutoffForUser(userId: string) {
     const currentZoned = toZonedTime(now, tz);
     const curMinutes = currentZoned.getHours() * 60 + currentZoned.getMinutes();
 
-    const startDayStr = formatInTimeZone(entry.startedAt, tz, 'yyyy-MM-dd');
-    const currentDayStr = formatInTimeZone(now, tz, 'yyyy-MM-dd');
+    const startDateObj = toZonedTime(entry.startedAt, tz);
+    const currentDateObj = toZonedTime(now, tz);
+    const startMidnight = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate()).getTime();
+    const currentMidnight = new Date(currentDateObj.getFullYear(), currentDateObj.getMonth(), currentDateObj.getDate()).getTime();
+    const daysDiff = Math.max(0, Math.round((currentMidnight - startMidnight) / (24 * 60 * 60 * 1000)));
 
-    const hasOfficeEnded = startDayStr !== currentDayStr || curMinutes >= closeMinutes;
+    const hasOfficeEnded = closeMinutes > openMinutes
+      ? (daysDiff > 0 || curMinutes >= closeMinutes)
+      : (daysDiff > 1 || (daysDiff === 1 && curMinutes >= closeMinutes) || (daysDiff === 0 && curMinutes >= closeMinutes && curMinutes < openMinutes));
 
     if (hasOfficeEnded) {
       await prisma.timeEntry.update({
@@ -527,10 +532,15 @@ export async function enforceGlobalOfficeCutoffs() {
     const currentZoned = toZonedTime(now, tz);
     const curMinutes = currentZoned.getHours() * 60 + currentZoned.getMinutes();
 
-    const startDayStr = formatInTimeZone(entry.startedAt, tz, 'yyyy-MM-dd');
-    const currentDayStr = formatInTimeZone(now, tz, 'yyyy-MM-dd');
+    const startDateObj = toZonedTime(entry.startedAt, tz);
+    const currentDateObj = toZonedTime(now, tz);
+    const startMidnight = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate()).getTime();
+    const currentMidnight = new Date(currentDateObj.getFullYear(), currentDateObj.getMonth(), currentDateObj.getDate()).getTime();
+    const daysDiff = Math.max(0, Math.round((currentMidnight - startMidnight) / (24 * 60 * 60 * 1000)));
 
-    const hasOfficeEnded = startDayStr !== currentDayStr || curMinutes >= closeMinutes;
+    const hasOfficeEnded = closeMinutes > openMinutes
+      ? (daysDiff > 0 || curMinutes >= closeMinutes)
+      : (daysDiff > 1 || (daysDiff === 1 && curMinutes >= closeMinutes) || (daysDiff === 0 && curMinutes >= closeMinutes && curMinutes < openMinutes));
 
     if (hasOfficeEnded) {
       await prisma.timeEntry.update({
