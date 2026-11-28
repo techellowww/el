@@ -318,6 +318,32 @@ export default function ScreenshotModulePage() {
         );
       }
 
+      // If in-memory items are empty or project has more items on server, query matching items
+      if (itemsToExport.length === 0) {
+        try {
+          const params = new URLSearchParams();
+          if (filterProjectId && filterProjectId !== 'ALL') params.append('projectId', filterProjectId);
+          if (filterUserId && filterUserId !== 'ALL') params.append('userId', filterUserId);
+          if (filterStartDate) params.append('startDate', filterStartDate);
+          if (filterEndDate) params.append('endDate', filterEndDate);
+          params.append('all', 'true');
+          params.append('limit', '200');
+
+          const fetchRes = await fetch(`/api/screenshots?${params.toString()}`);
+          if (fetchRes.ok) {
+            const fetchData = await fetchRes.json();
+            const fetchedList = fetchData.screenshots || [];
+            if (backupScope === 'selected' && selectedIds.size > 0) {
+              itemsToExport = fetchedList.filter((s: any) => selectedIds.has(s.id));
+            } else {
+              itemsToExport = fetchedList;
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('Could not fetch additional screenshots for zip export:', fetchErr);
+        }
+      }
+
       if (itemsToExport.length === 0) {
         setMessage({ type: 'error', text: 'No screenshots found to export.' });
         setIsBackingUp(false);
@@ -338,19 +364,49 @@ export default function ScreenshotModulePage() {
         const captureDate = new Date(item.capturedAt);
         const dateStr = `${captureDate.getFullYear()}-${String(captureDate.getMonth() + 1).padStart(2, '0')}-${String(captureDate.getDate()).padStart(2, '0')}`;
         const timeStr = `${String(captureDate.getHours()).padStart(2, '0')}-${String(captureDate.getMinutes()).padStart(2, '0')}-${String(captureDate.getSeconds()).padStart(2, '0')}`;
-        const safeEmp = (item.user.name || item.user.employeeId || 'Staff').replace(/[<>:"/\\|?*]+/g, '_').trim();
-        const fileName = `${safeEmp}_${timeStr}_${item.id.slice(0, 8)}.jpg`;
+        const safeEmp = (item.user?.name || item.user?.employeeId || 'Staff').replace(/[<>:"/\\|?*]+/g, '_').trim();
 
-        const base64Data = item.imageUrl.replace(/^data:image\/\w+;base64,/, '');
-        zip.file(`${safeProjectFolder}/${dateStr}/${fileName}`, base64Data, { base64: true });
+        let ext = 'jpg';
+        let base64Payload = item.imageUrl;
+        let isBase64 = true;
+
+        const dataUriMatch = item.imageUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/s);
+        if (dataUriMatch) {
+          const subType = dataUriMatch[1].toLowerCase();
+          if (subType.includes('svg')) ext = 'svg';
+          else if (subType === 'png') ext = 'png';
+          else if (subType === 'webp') ext = 'webp';
+          else if (subType === 'gif') ext = 'gif';
+          else if (subType === 'jpeg' || subType === 'jpg') ext = 'jpg';
+          else ext = subType.replace(/[^a-z0-9]/g, '') || 'jpg';
+          base64Payload = dataUriMatch[2].trim();
+        } else if (item.imageUrl.startsWith('data:image/svg+xml')) {
+          ext = 'svg';
+          isBase64 = false;
+          const commaIdx = item.imageUrl.indexOf(',');
+          base64Payload = commaIdx !== -1 ? decodeURIComponent(item.imageUrl.slice(commaIdx + 1)) : item.imageUrl;
+        } else if (item.imageUrl.trim().startsWith('<svg')) {
+          ext = 'svg';
+          isBase64 = false;
+          base64Payload = item.imageUrl;
+        } else {
+          base64Payload = item.imageUrl.replace(/^data:[^;]+;base64,/, '').trim();
+        }
+
+        const fileName = `${safeEmp}_${timeStr}_${item.id.slice(0, 8)}.${ext}`;
+        if (isBase64) {
+          zip.file(`${safeProjectFolder}/${dateStr}/${fileName}`, base64Payload, { base64: true });
+        } else {
+          zip.file(`${safeProjectFolder}/${dateStr}/${fileName}`, base64Payload);
+        }
 
         manifestFiles.push({
           id: item.id,
           fileName,
           path: `${safeProjectFolder}/${dateStr}/${fileName}`,
           projectName: projName,
-          employeeName: item.user.name,
-          employeeId: item.user.employeeId,
+          employeeName: item.user?.name,
+          employeeId: item.user?.employeeId || item.user?.email,
           capturedAt: item.capturedAt,
         });
       }
@@ -360,7 +416,7 @@ export default function ScreenshotModulePage() {
         JSON.stringify(
           {
             exportedAt: new Date().toISOString(),
-            totalScreenshots: itemsToExport.length,
+            totalScreenshots: manifestFiles.length,
             files: manifestFiles,
           },
           null,
@@ -380,11 +436,15 @@ export default function ScreenshotModulePage() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+      }, 10000);
 
       setMessage({
         type: 'success',
-        text: `Exported ${itemsToExport.length} screenshot(s) into Drive backup archive: Backup_${projLabel}_${getTodayDateString()}.zip`,
+        text: `Exported ${manifestFiles.length} screenshot(s) into Drive backup archive: Backup_${projLabel}_${getTodayDateString()}.zip`,
       });
       setBackupModalOpen(false);
     } catch (err: any) {
@@ -1392,7 +1452,7 @@ export default function ScreenshotModulePage() {
                 className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               />
               <p className="text-[11px] text-text-secondary">
-                Screenshots, date subdirectories, and a full <code className="text-primary font-mono">manifest.json</code> audit log will be written to this path.
+                Screenshots, date subdirectories, and a full <code className="text-primary font-mono">manifest.json</code> audit log will be written to this path. If the folder does not exist, it is created automatically.
               </p>
             </div>
 
@@ -1417,7 +1477,7 @@ export default function ScreenshotModulePage() {
                 title="Download ZIP package organized by project to your drive"
               >
                 <FolderDown className="w-3.5 h-3.5 text-primary" />
-                <span>Download ZIP to Drive</span>
+                <span>Download ZIP</span>
               </button>
 
               <button

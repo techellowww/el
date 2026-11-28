@@ -60,6 +60,8 @@ export async function POST(request: Request) {
       projectFolders: result.projectFolders,
       files: result.files,
       message: result.message,
+      isServerless: result.isServerless,
+      fallbackUsed: result.fallbackUsed,
     });
   } catch (error: any) {
     console.error('Error executing screenshot backup:', error);
